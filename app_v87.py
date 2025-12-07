@@ -50,7 +50,7 @@ st.markdown("""
         border: 1px solid #E0E0E0; border-top: 6px solid #3498db;
         
         /* 強制最小高度，確保整排對齊 */
-        height: 220px !important;
+        min-height: 180px;
         
         /* 彈性排版，讓內容垂直置中 */
         display: flex;
@@ -58,10 +58,8 @@ st.markdown("""
         justify-content: center;
         align-items: center;
     }
-    /* 字體稍微縮小以適應高度 */
-    .metric-value { font-size: 3rem !important; font-weight: 800; color: #2c3e50 !important; margin: 5px 0; }
-    .metric-label { font-size: 1.5rem !important; color: #555555 !important; font-weight: 700; }
-    .metric-sub { font-size: 1.1rem !important; color: #888888 !important; font-weight: bold; margin-top: 5px; }
+    .metric-value { font-size: 3.5rem !important; font-weight: 800; color: #2c3e50 !important; margin: 10px 0; }
+    .metric-label { font-size: 1.6rem !important; color: #555555 !important; font-weight: 700; }
     
     /* 副標題樣式 */
     .metric-sub { font-size: 1.2rem !important; color: #888888 !important; font-weight: bold; margin-top: 5px; }
@@ -161,7 +159,7 @@ if GOOGLE_API_KEY:
         generation_config=generation_config,
     )
 
-DB_FILE = 'stock_data_v74.csv' # 維持您的檔名
+DB_FILE = 'stock_data_v74.csv'
 BACKUP_FILE = 'stock_data_backup.csv'
 
 # --- 3. 核心函數 ---
@@ -211,7 +209,7 @@ def save_full_history(df_to_save):
 def clear_db():
     if os.path.exists(DB_FILE): os.remove(DB_FILE)
 
-# 【新增】計算風向持續天數
+# 【核心修正】計算風向持續天數 (正確的回溯邏輯)
 def calculate_wind_streak(df, current_date_str):
     if df.empty: return 0
     
@@ -348,7 +346,7 @@ def show_dashboard():
     c1, c2, c3, c4 = st.columns(4)
     wind_status = day_data['wind']; wind_color = "#2ecc71"
     
-    # 【新增】計算風向持續天數並顯示
+    # 計算持續天數 (修正後)
     wind_streak = calculate_wind_streak(df, selected_date)
     streak_text = f"已持續 {wind_streak} 天"
 
@@ -356,7 +354,6 @@ def show_dashboard():
     elif "亂" in str(wind_status): wind_color = "#9b59b6"
     elif "陣" in str(wind_status): wind_color = "#f1c40f"
     
-    # 傳入 sub_value
     render_metric_card(c1, "今日風向", wind_status, wind_color, sub_value=streak_text)
     
     render_metric_card(c2, "🪁 打工型風箏", day_data['part_time_count'], "#f39c12")
@@ -382,7 +379,7 @@ def show_dashboard():
     chart_df = df.copy(); chart_df['date_dt'] = pd.to_datetime(chart_df['date']); chart_df = chart_df.sort_values('date_dt', ascending=True)
     chart_df['Month'] = chart_df['date_dt'].dt.strftime('%Y-%m')
 
-    tab1, tab2, tab3 = st.tabs(["📈 風箏數量 (分組柱狀圖)", "🌬️ 每日風度分佈", "📅 每月風度統計"])
+    tab1, tab2, tab3 = st.tabs(["📈 風箏數量", "🌬️ 每日風度分佈", "📅 每月風度統計"])
     
     axis_config = alt.Axis(labelFontSize=16, titleFontSize=20, labelColor='#333333', titleColor='#333333', labelFontWeight='bold', grid=True, gridColor='#E0E0E0')
     legend_config = alt.Legend(orient='top', labelFontSize=16, titleFontSize=20, labelColor='#333333', titleColor='#333333')
@@ -464,15 +461,6 @@ def show_admin_panel():
                     raw_data = json.loads(json_text)
                     processed_list = []
                     for item in raw_data:
-                        def merge_keys(prefix, count):
-                            res = []; seen = set()
-                            for i in range(1, count + 1):
-                                val = item.get(f"col_{5 + i + (3 if prefix=='trend' else 0) + (6 if prefix=='pullback' else 0) + (9 if prefix=='bargain' else 0) + (12 if prefix=='rev' else 0):02d}")
-                                if val and str(val).lower() != 'null':
-                                    val_str = str(val).strip()
-                                    if val_str not in seen: res.append(val_str); seen.add(val_str)
-                            return "、".join(res)
-                        
                         def get_col_stocks(start, end):
                             res = []; seen = set()
                             for i in range(start, end + 1):
@@ -489,11 +477,13 @@ def show_admin_panel():
                             "part_time_count": item.get("col_03", 0),
                             "worker_strong_count": item.get("col_04", 0),
                             "worker_trend_count": item.get("col_05", 0),
+                            
                             "worker_strong_list": get_col_stocks(6, 8),
                             "worker_trend_list": get_col_stocks(9, 11),
                             "boss_pullback_list": get_col_stocks(12, 14),
                             "boss_bargain_list": get_col_stocks(15, 17),
                             "top_revenue_list": get_col_stocks(18, 23),
+                            
                             "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M")
                         }
                         processed_list.append(record)
