@@ -16,7 +16,7 @@ try:
 except ImportError:
     from typing import TypedDict
 
-# --- 1. 頁面與 CSS (V74_fixed: 導航回歸 + 標題白字修復 + 高度修正) ---
+# --- 1. 頁面與 CSS (V74: 導航回歸 + 標題白字修復 + 高度修正) ---
 st.set_page_config(layout="wide", page_title="StockTrack V74+Streak Fix", page_icon="🛠️")
 
 st.markdown("""
@@ -213,6 +213,7 @@ def calculate_wind_streak(df, current_date_str):
     if df.empty: return 0
     
     # 1. 篩選出「小於等於」當前日期的資料
+    # (即：只看過去，不看未來)
     past_df = df[df['date'] <= current_date_str].copy()
     
     # 2. 排序：由新到舊 (Index 0 = 當前選取的日期)
@@ -419,6 +420,7 @@ def show_dashboard():
 
     st.markdown("---")
     st.header("🏆 策略選股月度風雲榜")
+    st.caption("統計各策略下，股票出現的次數。")
     stats_df = calculate_monthly_stats(df)
     if not stats_df.empty:
         month_list = stats_df['Month'].unique()
@@ -440,7 +442,7 @@ def show_dashboard():
                                  column_config={"stock": "股票名稱", "Count": st.column_config.ProgressColumn("出現次數", format="%d次", min_value=0, max_value=int(strat_data['Count'].max()) if not strat_data.empty else 1)})
     else: st.info("累積足夠資料後，將在此顯示統計排行。")
 
-# --- 6. 後台 ---
+# --- 6. 頁面視圖：管理後台 (後台) ---
 def show_admin_panel():
     st.title("⚙️ 資料管理後台")
     if not GOOGLE_API_KEY: st.error("❌ 未設定 API Key"); return
@@ -453,47 +455,64 @@ def show_admin_panel():
         with st.spinner("AI 解析中..."):
             img = Image.open(uploaded_file)
             try:
-                # 【修正】呼叫 ai_analyze_v86
+                # 呼叫 AI 解析函數，並取得 JSON 格式字串
                 json_text = ai_analyze_v86(img)
-                if "error" in json_text and len(json_text) < 100: st.error(f"API 錯誤: {json_text}")
-                else:
-                    raw_data = json.loads(json_text)
-                    processed_list = []
-                    for item in raw_data:
-                        def merge_keys(prefix, count):
-                            res = []; seen = set()
-                            for i in range(1, count + 1):
-                                val = item.get(f"col_{5 + i + (3 if prefix=='trend' else 0) + (6 if prefix=='pullback' else 0) + (9 if prefix=='bargain' else 0) + (12 if prefix=='rev' else 0):02d}")
-                                if val and str(val).lower() != 'null':
-                                    val_str = str(val).strip()
-                                    if val_str not in seen: res.append(val_str); seen.add(val_str)
-                            return "、".join(res)
-                        
-                        def get_col_stocks(start, end):
-                            res = []; seen = set()
-                            for i in range(start, end + 1):
-                                val = item.get(f"col_{i:02d}")
-                                if val and str(val).lower() != 'null':
-                                    val_str = str(val).strip()
-                                    if val_str not in seen: res.append(val_str); seen.add(val_str)
-                            return "、".join(res)
+                
+                # 【關鍵修正】檢查回傳的是不是錯誤字串
+                if isinstance(json_text, str) and "error" in json_text and "{" in json_text:
+                     try:
+                        err_obj = json.loads(json_text)
+                        if "error" in err_obj:
+                             st.error(f"API 回傳錯誤: {err_obj['error']}")
+                             st.stop()
+                     except: pass
+                
+                # 如果是正常 JSON 字串，則進行解析
+                raw_data = json.loads(json_text)
+                
+                # 【修正：確保 raw_data 是列表】
+                if isinstance(raw_data, dict): 
+                    raw_data = [raw_data] # 如果 AI 只回傳一個物件，把它包成列表
 
-                        if not item.get("col_01"): continue
-                        record = {
-                            "date": str(item.get("col_01")).replace("/", "-"),
-                            "wind": item.get("col_02", ""),
-                            "part_time_count": item.get("col_03", 0),
-                            "worker_strong_count": item.get("col_04", 0),
-                            "worker_trend_count": item.get("col_05", 0),
-                            "worker_strong_list": get_col_stocks(6, 8),
-                            "worker_trend_list": get_col_stocks(9, 11),
-                            "boss_pullback_list": get_col_stocks(12, 14),
-                            "boss_bargain_list": get_col_stocks(15, 17),
-                            "top_revenue_list": get_col_stocks(18, 23),
-                            "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M")
-                        }
-                        processed_list.append(record)
-                    st.session_state.preview_df = pd.DataFrame(processed_list)
+                processed_list = []
+                for item in raw_data:
+                    # 再次確認 item 是字典
+                    if not isinstance(item, dict): continue
+
+                    def merge_keys(prefix, count):
+                        res = []; seen = set()
+                        for i in range(1, count + 1):
+                            val = item.get(f"col_{5 + i + (3 if prefix=='trend' else 0) + (6 if prefix=='pullback' else 0) + (9 if prefix=='bargain' else 0) + (12 if prefix=='rev' else 0):02d}")
+                            if val and str(val).lower() != 'null':
+                                val_str = str(val).strip()
+                                if val_str not in seen: res.append(val_str); seen.add(val_str)
+                        return "、".join(res)
+                    
+                    def get_col_stocks(start, end):
+                        res = []; seen = set()
+                        for i in range(start, end + 1):
+                            val = item.get(f"col_{i:02d}")
+                            if val and str(val).lower() != 'null':
+                                val_str = str(val).strip()
+                                if val_str not in seen: res.append(val_str); seen.add(val_str)
+                        return "、".join(res)
+
+                    if not item.get("col_01"): continue
+                    record = {
+                        "date": str(item.get("col_01")).replace("/", "-"),
+                        "wind": item.get("col_02", ""),
+                        "part_time_count": item.get("col_03", 0),
+                        "worker_strong_count": item.get("col_04", 0),
+                        "worker_trend_count": item.get("col_05", 0),
+                        "worker_strong_list": get_col_stocks(6, 8),
+                        "worker_trend_list": get_col_stocks(9, 11),
+                        "boss_pullback_list": get_col_stocks(12, 14),
+                        "boss_bargain_list": get_col_stocks(15, 17),
+                        "top_revenue_list": get_col_stocks(18, 23),
+                        "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M")
+                    }
+                    processed_list.append(record)
+                st.session_state.preview_df = pd.DataFrame(processed_list)
             except Exception as e: st.error(f"錯誤: {e}")
 
     if st.session_state.preview_df is not None:
@@ -528,9 +547,11 @@ def main():
         with st.sidebar.expander("管理員登入"):
             pwd = st.text_input("密碼", type="password")
             if pwd == "8899abc168": st.session_state.is_admin = True; st.rerun()
+    
     if st.session_state.is_admin:
         options.append("⚙️ 資料管理後台")
         if st.sidebar.button("登出"): st.session_state.is_admin = False; st.rerun()
+
     page = st.sidebar.radio("前往", options)
     if page == "📊 戰情儀表板": show_dashboard()
     elif page == "⚙️ 資料管理後台": show_admin_panel()
