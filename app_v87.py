@@ -9,8 +9,6 @@ import time
 from datetime import datetime
 import altair as alt
 import shutil
-import feedparser
-import twstock
 
 # 修正 Pydantic 錯誤
 try:
@@ -18,16 +16,24 @@ try:
 except ImportError:
     from typing import TypedDict
 
-# --- 1. 頁面設定 ---
-st.set_page_config(layout="wide", page_title="StockTrack V103 版面平衡版", page_icon="⚖️")
+# --- 1. 頁面與 CSS (V74: 導航回歸 + 標題白字修復 + 高度修正) ---
+st.set_page_config(layout="wide", page_title="StockTrack V74+Streak", page_icon="🛠️")
 
 st.markdown("""
 <style>
-    /* 全域設定 */
-    .stApp { background-color: #FFFFFF !important; color: #333333 !important; font-family: 'Helvetica', 'Arial', sans-serif; }
-    h1, h2, h3, h4, h5, h6, p, div, span, label, li { color: #333333 !important; }
+    /* 1. 全域背景 (淺灰藍) 與深色文字 */
+    .stApp {
+        background-color: #F4F6F9 !important;
+        color: #333333 !important;
+        font-family: 'Helvetica', 'Arial', sans-serif;
+    }
     
-    /* 標題區 */
+    /* 2. 一般標題與文字強制深色 */
+    h1, h2, h3, h4, h5, h6, p, div, span, label, li {
+        color: #333333;
+    }
+
+    /* 3. 頂部標題區 (深色底，白字) */
     .title-box {
         background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
         padding: 30px; border-radius: 15px; margin-bottom: 25px; text-align: center;
@@ -36,17 +42,14 @@ st.markdown("""
     .title-box h1 { color: #FFFFFF !important; font-size: 40px !important; }
     .title-box p { color: #EEEEEE !important; font-size: 20px !important; }
 
-    /* 數據卡片 - 關鍵修正 */
+    /* 4. 數據卡片 (關鍵修正：強制高度與置中) */
     div.metric-container {
         background-color: #FFFFFF !important; 
-        border-radius: 12px; 
-        padding: 15px; /* 稍微減少內距 */
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
-        text-align: center;
-        border: 1px solid #E0E0E0; 
-        border-top: 6px solid #3498db;
+        border-radius: 12px; padding: 25px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center;
+        border: 1px solid #E0E0E0; border-top: 6px solid #3498db;
         
-        /* 【關鍵】強制固定高度，確保四張卡片一樣大 */
+        /* 強制最小高度，確保整排對齊 */
         height: 220px !important;
         
         /* 彈性排版，讓內容垂直置中 */
@@ -59,55 +62,51 @@ st.markdown("""
     .metric-value { font-size: 3rem !important; font-weight: 800; color: #2c3e50 !important; margin: 5px 0; }
     .metric-label { font-size: 1.5rem !important; color: #555555 !important; font-weight: 700; }
     .metric-sub { font-size: 1.1rem !important; color: #888888 !important; font-weight: bold; margin-top: 5px; }
+    
+    /* 副標題樣式 */
+    .metric-sub { font-size: 1.2rem !important; color: #888888 !important; font-weight: bold; margin-top: 5px; }
 
-    /* 策略橫幅 */
+    /* 5. 策略橫幅 (容器) */
     .strategy-banner {
-        padding: 15px 25px; border-radius: 8px; margin-top: 35px; margin-bottom: 20px; display: flex; align-items: center;
+        padding: 15px 25px; border-radius: 8px; 
+        margin-top: 35px; margin-bottom: 20px; display: flex; align-items: center;
         box-shadow: 0 3px 6px rgba(0,0,0,0.15);
     }
-    .banner-text { color: #FFFFFF !important; font-size: 24px !important; font-weight: 800 !important; margin: 0 !important; }
+    /* 【修正】策略橫幅內的文字：強制白色 */
+    .banner-text {
+        color: #FFFFFF !important;
+        font-size: 24px !important;
+        font-weight: 800 !important;
+        margin: 0 !important;
+    }
+    
     .worker-banner { background: linear-gradient(90deg, #2980b9, #3498db); }
     .boss-banner { background: linear-gradient(90deg, #c0392b, #e74c3c); }
     .revenue-banner { background: linear-gradient(90deg, #d35400, #e67e22); }
-    
-    /* 股票標籤 */
+
+    /* 6. 股票標籤 */
     .stock-tag {
         display: inline-block; background-color: #FFFFFF; color: #2c3e50 !important;
-        border: 2px solid #bdc3c7; padding: 12px 24px; margin: 10px;
+        border: 3px solid #bdc3c7; padding: 12px 24px; margin: 10px;
         border-radius: 10px; font-weight: 800; font-size: 1.8rem;
         box-shadow: 0 2px 5px rgba(0,0,0,0.05);
     }
     .stock-tag-cb { background-color: #fff8e1; border-color: #f1c40f; color: #d35400 !important; }
     .cb-badge { background-color: #e67e22; color: #FFFFFF !important; font-size: 0.7em; padding: 3px 8px; border-radius: 4px; margin-left: 10px; vertical-align: middle; }
     
-    /* 新聞卡片 */
-    .news-card {
-        padding: 15px; border-radius: 10px; background-color: #f8f9fa; 
-        border-left: 5px solid #ccc; margin-bottom: 10px; 
-        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-    }
-    .news-card h4 { margin: 0; font-size: 18px; font-weight: 700; }
-    .news-card p { margin: 5px 0 0 0; font-size: 16px; color: #555; }
-    a { text-decoration: none; color: #2c3e50; }
-
-    /* 表格優化 */
+    /* 7. 表格優化 */
     .stDataFrame table { text-align: center !important; }
     .stDataFrame th { font-size: 22px !important; color: #000000 !important; background-color: #E6E9EF !important; text-align: center !important; font-weight: 900 !important; }
     .stDataFrame td { font-size: 20px !important; color: #333333 !important; background-color: #FFFFFF !important; text-align: center !important; }
-    
-    /* 元件優化 */
+
+    /* 8. 分頁標籤 */
     button[data-baseweb="tab"] { background-color: #FFFFFF !important; border: 1px solid #ddd !important; }
     button[data-baseweb="tab"] div p { color: #333333 !important; font-size: 20px !important; font-weight: 800 !important; }
     button[data-baseweb="tab"][aria-selected="true"] { background-color: #e3f2fd !important; border-bottom: 4px solid #3498db !important; }
+    
+    /* 9. 下拉選單 */
     [data-testid="stSelectbox"] label { font-size: 20px !important; color: #333333 !important; font-weight: bold !important; }
     [data-baseweb="select"] div { font-size: 18px !important; color: #333333 !important; background-color: #FFFFFF !important; }
-
-    /* 手機適配 */
-    @media only screen and (max-width: 768px) {
-        .title-box h1 { font-size: 28px !important; }
-        div.metric-container { min-height: auto !important; height: auto !important; } /* 手機版取消強制高度 */
-        .metric-value { font-size: 2.5rem !important; }
-    }
 
     #MainMenu {visibility: hidden;} footer {visibility: hidden;}
 </style>
@@ -157,61 +156,15 @@ generation_config = {
 }
 
 if GOOGLE_API_KEY:
-    model = genai.GenerativeModel("gemini-2.0-flash", generation_config=generation_config)
-    news_model = genai.GenerativeModel("gemini-2.0-flash")
+    model = genai.GenerativeModel(
+        model_name="gemini-2.0-flash", 
+        generation_config=generation_config,
+    )
 
-DB_FILE = 'stock_data_v98.csv' # 沿用資料庫
+DB_FILE = 'stock_data_v74.csv' # 維持您的檔名
 BACKUP_FILE = 'stock_data_backup.csv'
 
 # --- 3. 核心函數 ---
-
-@st.cache_data(ttl=3600)
-def check_revenue_performance(stock_name):
-    clean_name = stock_name.replace("(CB)", "").strip()
-    try:
-        codes = twstock.codes
-        target_code = None
-        for code, info in codes.items():
-            if info.name == clean_name:
-                target_code = code
-                break
-        if target_code: return "📈", False 
-    except: pass
-    return "", False
-
-def fetch_financial_news():
-    if not GOOGLE_API_KEY: return []
-    rss_sources = {
-        "Yahoo 股市": "https://tw.stock.yahoo.com/rss/url/d/e/N3.html",
-        "Google 財經": "https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=zh-TW&gl=TW&ceid=TW:zh-Hant"
-    }
-    news_items = []
-    try:
-        for source, url in rss_sources.items():
-            feed = feedparser.parse(url)
-            for entry in feed.entries[:5]: 
-                news_items.append(f"- [{source}] {entry.title} ({entry.link})")
-    except Exception: return []
-
-    if not news_items: return []
-    news_text = "\n".join(news_items)
-    prompt = f"""
-    你是專業的股票分析師。以下是今天台灣股市的最新焦點新聞：
-    {news_text}
-    請幫我從中挑選 **5 則最重要的市場消息**。
-    針對每一則新聞，請依序輸出：
-    1. **title**: 新聞標題
-    2. **comment**: 一句話短評 (利多/利空/中性)
-    3. **url**: 原始連結
-    4. **sentiment**: "positive", "negative", "neutral"
-    請回傳 JSON Array。
-    """
-    try:
-        response = news_model.generate_content(prompt)
-        text = response.text.replace("```json", "").replace("```", "")
-        return json.loads(text)
-    except: return []
-
 def load_db():
     if os.path.exists(DB_FILE):
         try:
@@ -258,61 +211,73 @@ def save_full_history(df_to_save):
 def clear_db():
     if os.path.exists(DB_FILE): os.remove(DB_FILE)
 
-# 智慧重試
-def generate_with_retry(prompt, image, retries=3):
-    from google.api_core import exceptions
-    for i in range(retries):
-        try:
-            return model.generate_content([prompt, image])
-        except exceptions.ResourceExhausted:
-            wait_time = (i + 1) * 10
-            st.warning(f"⏳ 系統忙碌 (429)，冷卻 {wait_time} 秒後重試...", icon="🛡️")
-            time.sleep(wait_time)
-            continue
-        except Exception as e:
-            return json.dumps({"error": str(e)})
-    return json.dumps({"error": "ResourceExhausted: 重試多次無效。"})
+# 【新增】計算風向持續天數
+def calculate_wind_streak(df, current_date_str):
+    if df.empty: return 0
+    
+    # 確保按日期倒序排列 (舊的在下面，新的在上面，方便我們找過去)
+    # 我們需要找「小於等於」選定日期的資料
+    past_df = df[df['date'] <= current_date_str].copy()
+    
+    if past_df.empty: return 0
+    
+    # 排序：日期由新到舊 (Index 0 是當前選的日期)
+    past_df = past_df.sort_values('date', ascending=False).reset_index(drop=True)
+    
+    def clean_wind(w): return str(w).replace("(CB)", "").strip()
+    
+    current_wind = clean_wind(past_df.iloc[0]['wind'])
+    streak = 1
+    
+    # 往回數 (Index 1, 2, 3...)
+    for i in range(1, len(past_df)):
+        prev_wind = clean_wind(past_df.iloc[i]['wind'])
+        if prev_wind == current_wind:
+            streak += 1
+        else:
+            break
+    return streak
 
 def ai_analyze_v86(image):
-    # V50/V86 絕對座標邏輯
     prompt = """
     你是一個精準的表格座標讀取器。請分析圖片中的每一行，回傳 JSON Array。
     【核心策略：利用標題下方的數字 1, 2, 3 進行對齊】
     表格標題列下方有明確的數字編號，請務必對齊這些編號來讀取資料，絕對不要錯位。
-    
     【欄位對應表】
     1. `col_01`: 日期
     2. `col_02`: 風度
     3. `col_03`: 打工數
     4. `col_04`: 強勢週數
     5. `col_05`: 週趨勢數
-    
     --- 黃色區塊 ---
-    6. `col_06`: 強勢週 (1) | 7. `col_07`: 強勢週 (2) | 8. `col_08`: 強勢週 (3)
-    9. `col_09`: 週趨勢 (1) | 10. `col_10`: 週趨勢 (2) | 11. `col_11`: 週趨勢 (3)
-    
+    6. `col_06`: 強勢週 (對應數字 1)
+    7. `col_07`: 強勢週 (對應數字 2)
+    8. `col_08`: 強勢週 (對應數字 3)
+    9. `col_09`: 週趨勢 (對應數字 1)
+    10. `col_10`: 週趨勢 (對應數字 2)
+    11. `col_11`: 週趨勢 (對應數字 3)
     --- 藍色區塊 ---
-    12. `col_12`: 週拉回 (1) | 13. `col_13`: 週拉回 (2) | 14. `col_14`: 週拉回 (3)
-    15. `col_15`: 廉價收購 (1) | 16. `col_16`: 廉價收購 (2) | 17. `col_17`: 廉價收購 (3)
-    
+    12. `col_12`: 週拉回 (對應數字 1)
+    13. `col_13`: 週拉回 (對應數字 2)
+    14. `col_14`: 週拉回 (對應數字 3)
+    15. `col_15`: 廉價收購 (對應數字 1)
+    16. `col_16`: 廉價收購 (對應數字 2)
+    17. `col_17`: 廉價收購 (對應數字 3)
     --- 灰色區塊 ---
     18. `col_18` ~ 23. `col_23`: 營收創高 Top 6
-
     【重要校正：12/02 & 12/04】
     - 12/02 週拉回: 只有宜鼎、宇瞻。Col 14 是 null。
     - 12/02 廉價收購: 群聯、高力、宜鼎 (對齊 1,2,3)。
     - 12/04 強勢週: 只有勤凱 (Col 6)。
     - 12/04 週趨勢: 只有雍智科技 (Col 9)。
-
     【標記】
     - 橘色背景請加 `(CB)`。
     - 格子為空請填 null。
     請回傳 JSON Array。
     """
     try:
-        response_obj = generate_with_retry(prompt, image)
-        if isinstance(response_obj, str): return response_obj 
-        return response_obj.text
+        response = model.generate_content([prompt, image])
+        return response.text
     except Exception as e: return json.dumps({"error": str(e)})
 
 # --- 4. 統計與繪圖函數 ---
@@ -343,6 +308,7 @@ def calculate_monthly_stats(df):
     final_df = final_df.sort_values(['Month', 'Strategy', 'Count'], ascending=[False, True, False])
     return final_df
 
+# 【修改】支援副標題顯示
 def render_metric_card(col, label, value, color_border="gray", sub_value=""):
     sub_html = f'<div class="metric-sub">{sub_value}</div>' if sub_value else ""
     col.markdown(f"""
@@ -359,78 +325,45 @@ def render_stock_tags(stock_str):
     stocks = str(stock_str).split('、')
     for s in stocks:
         if not s: continue
-        display_name = s.replace("(CB)", "").strip()
-        icon, _ = check_revenue_performance(display_name)
-        if "(CB)" in s: name = s.replace("(CB)", ""); html += f"<div class='stock-tag stock-tag-cb'>{name}<span class='cb-badge'>CB</span>{icon}</div>"
-        else: html += f"<div class='stock-tag'>{s}{icon}</div>"
+        if "(CB)" in s: name = s.replace("(CB)", ""); html += f"<div class='stock-tag stock-tag-cb'>{name}<span class='cb-badge'>CB</span></div>"
+        else: html += f"<div class='stock-tag'>{s}</div>"
     return html
 
-def calculate_wind_streak(df, current_date_str):
-    if df.empty: return 0
-    df = df.sort_values('date', ascending=False).reset_index(drop=True)
-    def clean_wind(w): return str(w).replace("(CB)", "").strip()
-    
-    # 找到當前日期的風向
-    today_records = df[df['date'] == current_date_str]
-    if today_records.empty: return 0
-    current_wind = clean_wind(today_records.iloc[0]['wind'])
-    
-    # 篩選小於等於今天的資料
-    past_df = df[df['date'] <= current_date_str].sort_values('date', ascending=False).reset_index(drop=True)
-    
-    streak = 0
-    for i in range(len(past_df)):
-        if clean_wind(past_df.iloc[i]['wind']) == current_wind:
-            streak += 1
-        else:
-            break
-    return streak
-
-# --- 5. 頁面顯示邏輯 ---
+# --- 5. 頁面視圖：戰情儀表板 (前台) ---
 def show_dashboard():
-    st.markdown(f"""<div class="title-box"><h1 style='margin:0; font-size: 2.8rem;'>📈 StockTrack 戰情中心</h1><p style='margin-top:10px; opacity:0.9;'>數據驅動，決勝千里</p></div>""", unsafe_allow_html=True)
-    
-    with st.expander("📰 點擊查看：AI 每日財經晨報 (即時更新)", expanded=False):
-        if st.button("🔄 立即抓取最新新聞", use_container_width=True):
-            with st.spinner("AI 正在閱讀今日頭條..."):
-                news_data = fetch_financial_news()
-                if news_data:
-                    for news in news_data:
-                        color = "#e74c3c" if news['sentiment'] == 'positive' else "#2ecc71" if news['sentiment'] == 'negative' else "#7f8c8d"
-                        icon = "🔥" if news['sentiment'] == 'positive' else "🌧️" if news['sentiment'] == 'negative' else "😐"
-                        st.markdown(f"""<div class="news-card" style="border-left: 5px solid {color}; padding: 15px; background: #f9f9f9; margin-bottom: 10px; border-radius: 8px;"><h4 style="margin:0; font-size: 18px;"><a href="{news['url']}" target="_blank" style="text-decoration:none; color:#333;">{news['title']}</a></h4><p style="margin:5px 0 0 0; font-size: 16px; color:#555;"><b>{icon} AI 觀點：</b> {news['comment']}</p></div>""", unsafe_allow_html=True)
-                else: st.warning("暫時無法取得新聞。")
-
     df = load_db()
     if df.empty:
-        st.info("👋 資料庫目前為空。請至後台新增。")
+        st.info("👋 目前無資料。請至後台新增。")
         return
 
     all_dates = df['date'].unique()
     st.sidebar.divider(); st.sidebar.header("📅 歷史回顧")
     selected_date = st.sidebar.selectbox("選擇日期", options=all_dates, index=0)
     day_df = df[df['date'] == selected_date]
-    if day_df.empty: st.error("日期資料讀取錯誤"); return
+    if day_df.empty: st.error("日期讀取錯誤"); return
     day_data = day_df.iloc[0]
 
-    update_time = str(day_data.get('last_updated', ''))
-    if update_time == 'nan' or update_time == '': update_time = "本次更新"
-    st.caption(f"📅 當前顯示日期：{selected_date} | 資料更新於：{update_time}")
+    st.markdown(f"""<div class="title-box"><h1 style='margin:0; font-size: 2.8rem;'>📅 {selected_date} 市場戰情室</h1><p style='margin-top:10px; opacity:0.9;'>資料更新於: {day_data['last_updated']}</p></div>""", unsafe_allow_html=True)
 
     c1, c2, c3, c4 = st.columns(4)
     wind_status = day_data['wind']; wind_color = "#2ecc71"
+    
+    # 【新增】計算風向持續天數並顯示
+    wind_streak = calculate_wind_streak(df, selected_date)
+    streak_text = f"已持續 {wind_streak} 天"
+
     if "強" in str(wind_status): wind_color = "#e74c3c"
     elif "亂" in str(wind_status): wind_color = "#9b59b6"
     elif "陣" in str(wind_status): wind_color = "#f1c40f"
     
-    wind_streak = calculate_wind_streak(df, selected_date)
-    streak_text = f"已持續 {wind_streak} 天"
-    
+    # 傳入 sub_value
     render_metric_card(c1, "今日風向", wind_status, wind_color, sub_value=streak_text)
+    
     render_metric_card(c2, "🪁 打工型風箏", day_data['part_time_count'], "#f39c12")
     render_metric_card(c3, "💪 上班族強勢週", day_data['worker_strong_count'], "#3498db")
     render_metric_card(c4, "📈 上班族週趨勢", day_data['worker_trend_count'], "#9b59b6")
 
+    # 【修正】使用 .banner-text 確保白色
     st.markdown('<div class="strategy-banner worker-banner"><p class="banner-text">👨‍💼 上班族策略 (Worker Strategy)</p></div>', unsafe_allow_html=True)
     w1, w2 = st.columns(2)
     with w1: st.markdown("### 🚀 強勢週 TOP 3"); st.markdown(render_stock_tags(day_data['worker_strong_list']), unsafe_allow_html=True)
@@ -449,7 +382,7 @@ def show_dashboard():
     chart_df = df.copy(); chart_df['date_dt'] = pd.to_datetime(chart_df['date']); chart_df = chart_df.sort_values('date_dt', ascending=True)
     chart_df['Month'] = chart_df['date_dt'].dt.strftime('%Y-%m')
 
-    tab1, tab2, tab3 = st.tabs(["📈 風箏數量 (分組柱狀圖)", "🌬️ 每日風度分佈", "📅 月度風度統計 (分組柱狀圖)"])
+    tab1, tab2, tab3 = st.tabs(["📈 風箏數量 (分組柱狀圖)", "🌬️ 每日風度分佈", "📅 每月風度統計"])
     
     axis_config = alt.Axis(labelFontSize=16, titleFontSize=20, labelColor='#333333', titleColor='#333333', labelFontWeight='bold', grid=True, gridColor='#E0E0E0')
     legend_config = alt.Legend(orient='top', labelFontSize=16, titleFontSize=20, labelColor='#333333', titleColor='#333333')
@@ -490,6 +423,7 @@ def show_dashboard():
 
     st.markdown("---")
     st.header("🏆 策略選股月度風雲榜")
+    st.caption("統計各策略下，股票出現的次數。")
     stats_df = calculate_monthly_stats(df)
     if not stats_df.empty:
         month_list = stats_df['Month'].unique()
@@ -511,7 +445,7 @@ def show_dashboard():
                                  column_config={"stock": "股票名稱", "Count": st.column_config.ProgressColumn("出現次數", format="%d次", min_value=0, max_value=int(strat_data['Count'].max()) if not strat_data.empty else 1)})
     else: st.info("累積足夠資料後，將在此顯示統計排行。")
 
-# --- 6. 後台 ---
+# --- 6. 頁面視圖：管理後台 (後台) ---
 def show_admin_panel():
     st.title("⚙️ 資料管理後台")
     if not GOOGLE_API_KEY: st.error("❌ 未設定 API Key"); return
@@ -530,6 +464,15 @@ def show_admin_panel():
                     raw_data = json.loads(json_text)
                     processed_list = []
                     for item in raw_data:
+                        def merge_keys(prefix, count):
+                            res = []; seen = set()
+                            for i in range(1, count + 1):
+                                val = item.get(f"col_{5 + i + (3 if prefix=='trend' else 0) + (6 if prefix=='pullback' else 0) + (9 if prefix=='bargain' else 0) + (12 if prefix=='rev' else 0):02d}")
+                                if val and str(val).lower() != 'null':
+                                    val_str = str(val).strip()
+                                    if val_str not in seen: res.append(val_str); seen.add(val_str)
+                            return "、".join(res)
+                        
                         def get_col_stocks(start, end):
                             res = []; seen = set()
                             for i in range(start, end + 1):
@@ -589,9 +532,11 @@ def main():
         with st.sidebar.expander("管理員登入"):
             pwd = st.text_input("密碼", type="password")
             if pwd == "8899abc168": st.session_state.is_admin = True; st.rerun()
+    
     if st.session_state.is_admin:
         options.append("⚙️ 資料管理後台")
         if st.sidebar.button("登出"): st.session_state.is_admin = False; st.rerun()
+
     page = st.sidebar.radio("前往", options)
     if page == "📊 戰情儀表板": show_dashboard()
     elif page == "⚙️ 資料管理後台": show_admin_panel()
