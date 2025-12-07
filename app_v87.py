@@ -16,7 +16,7 @@ try:
 except ImportError:
     from typing import TypedDict
 
-# --- 1. 頁面與 CSS (V74: 導航回歸 + 標題白字修復 + 高度修正) ---
+# --- 1. 頁面與 CSS (V74_fixed: 導航回歸 + 標題白字修復 + 卡片高度修正) ---
 st.set_page_config(layout="wide", page_title="StockTrack V74+Streak", page_icon="🛠️")
 
 st.markdown("""
@@ -60,9 +60,8 @@ st.markdown("""
     }
     .metric-value { font-size: 3.5rem !important; font-weight: 800; color: #2c3e50 !important; margin: 10px 0; }
     .metric-label { font-size: 1.6rem !important; color: #555555 !important; font-weight: 700; }
-    
     /* 副標題樣式 */
-    .metric-sub { font-size: 1.2rem !important; color: #888888 !important; font-weight: bold; margin-top: 5px; }
+    .metric-sub { font-size: 1.2rem !important; color: #888888 !important; margin-top: 5px; font-weight: bold; }
 
     /* 5. 策略橫幅 (容器) */
     .strategy-banner {
@@ -213,21 +212,22 @@ def clear_db():
 def calculate_wind_streak(df, current_date_str):
     if df.empty: return 0
     
-    # 確保按日期倒序排列 (舊的在下面，新的在上面，方便我們找過去)
-    # 我們需要找「小於等於」選定日期的資料
+    # 1. 篩選出「小於等於」當前日期的資料
+    # (即：只看過去，不看未來)
     past_df = df[df['date'] <= current_date_str].copy()
+    
+    # 2. 排序：由新到舊 (Index 0 = 當前選取的日期)
+    past_df = past_df.sort_values('date', ascending=False).reset_index(drop=True)
     
     if past_df.empty: return 0
     
-    # 排序：日期由新到舊 (Index 0 是當前選的日期)
-    past_df = past_df.sort_values('date', ascending=False).reset_index(drop=True)
-    
+    # 清理函數：移除標記與空白
     def clean_wind(w): return str(w).replace("(CB)", "").strip()
     
     current_wind = clean_wind(past_df.iloc[0]['wind'])
     streak = 1
     
-    # 往回數 (Index 1, 2, 3...)
+    # 3. 往回檢查 (從 Index 1 開始，也就是前一天)
     for i in range(1, len(past_df)):
         prev_wind = clean_wind(past_df.iloc[i]['wind'])
         if prev_wind == current_wind:
@@ -306,7 +306,7 @@ def calculate_monthly_stats(df):
     final_df = final_df.sort_values(['Month', 'Strategy', 'Count'], ascending=[False, True, False])
     return final_df
 
-# 【修改】支援副標題顯示
+# 【修改】支援副標題
 def render_metric_card(col, label, value, color_border="gray", sub_value=""):
     sub_html = f'<div class="metric-sub">{sub_value}</div>' if sub_value else ""
     col.markdown(f"""
@@ -354,6 +354,7 @@ def show_dashboard():
     elif "亂" in str(wind_status): wind_color = "#9b59b6"
     elif "陣" in str(wind_status): wind_color = "#f1c40f"
     
+    # 傳入 sub_value
     render_metric_card(c1, "今日風向", wind_status, wind_color, sub_value=streak_text)
     
     render_metric_card(c2, "🪁 打工型風箏", day_data['part_time_count'], "#f39c12")
@@ -461,6 +462,15 @@ def show_admin_panel():
                     raw_data = json.loads(json_text)
                     processed_list = []
                     for item in raw_data:
+                        def merge_keys(prefix, count):
+                            res = []; seen = set()
+                            for i in range(1, count + 1):
+                                val = item.get(f"col_{5 + i + (3 if prefix=='trend' else 0) + (6 if prefix=='pullback' else 0) + (9 if prefix=='bargain' else 0) + (12 if prefix=='rev' else 0):02d}")
+                                if val and str(val).lower() != 'null':
+                                    val_str = str(val).strip()
+                                    if val_str not in seen: res.append(val_str); seen.add(val_str)
+                            return "、".join(res)
+                        
                         def get_col_stocks(start, end):
                             res = []; seen = set()
                             for i in range(start, end + 1):
@@ -477,13 +487,11 @@ def show_admin_panel():
                             "part_time_count": item.get("col_03", 0),
                             "worker_strong_count": item.get("col_04", 0),
                             "worker_trend_count": item.get("col_05", 0),
-                            
                             "worker_strong_list": get_col_stocks(6, 8),
                             "worker_trend_list": get_col_stocks(9, 11),
                             "boss_pullback_list": get_col_stocks(12, 14),
                             "boss_bargain_list": get_col_stocks(15, 17),
                             "top_revenue_list": get_col_stocks(18, 23),
-                            
                             "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M")
                         }
                         processed_list.append(record)
@@ -522,11 +530,9 @@ def main():
         with st.sidebar.expander("管理員登入"):
             pwd = st.text_input("密碼", type="password")
             if pwd == "8899abc168": st.session_state.is_admin = True; st.rerun()
-    
     if st.session_state.is_admin:
         options.append("⚙️ 資料管理後台")
         if st.sidebar.button("登出"): st.session_state.is_admin = False; st.rerun()
-
     page = st.sidebar.radio("前往", options)
     if page == "📊 戰情儀表板": show_dashboard()
     elif page == "⚙️ 資料管理後台": show_admin_panel()
