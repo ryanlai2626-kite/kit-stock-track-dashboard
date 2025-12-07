@@ -16,8 +16,8 @@ try:
 except ImportError:
     from typing import TypedDict
 
-# --- 1. 頁面與 CSS (V74_fixed: 導航回歸 + 標題白字修復 + 卡片高度修正) ---
-st.set_page_config(layout="wide", page_title="StockTrack V74+Streak", page_icon="🛠️")
+# --- 1. 頁面與 CSS (V74_fixed: 導航回歸 + 標題白字修復 + 高度修正) ---
+st.set_page_config(layout="wide", page_title="StockTrack V74+Streak Fix", page_icon="🛠️")
 
 st.markdown("""
 <style>
@@ -213,7 +213,6 @@ def calculate_wind_streak(df, current_date_str):
     if df.empty: return 0
     
     # 1. 篩選出「小於等於」當前日期的資料
-    # (即：只看過去，不看未來)
     past_df = df[df['date'] <= current_date_str].copy()
     
     # 2. 排序：由新到舊 (Index 0 = 當前選取的日期)
@@ -354,7 +353,6 @@ def show_dashboard():
     elif "亂" in str(wind_status): wind_color = "#9b59b6"
     elif "陣" in str(wind_status): wind_color = "#f1c40f"
     
-    # 傳入 sub_value
     render_metric_card(c1, "今日風向", wind_status, wind_color, sub_value=streak_text)
     
     render_metric_card(c2, "🪁 打工型風箏", day_data['part_time_count'], "#f39c12")
@@ -421,7 +419,6 @@ def show_dashboard():
 
     st.markdown("---")
     st.header("🏆 策略選股月度風雲榜")
-    st.caption("統計各策略下，股票出現的次數。")
     stats_df = calculate_monthly_stats(df)
     if not stats_df.empty:
         month_list = stats_df['Month'].unique()
@@ -443,7 +440,7 @@ def show_dashboard():
                                  column_config={"stock": "股票名稱", "Count": st.column_config.ProgressColumn("出現次數", format="%d次", min_value=0, max_value=int(strat_data['Count'].max()) if not strat_data.empty else 1)})
     else: st.info("累積足夠資料後，將在此顯示統計排行。")
 
-# --- 6. 頁面視圖：管理後台 (後台) ---
+# --- 6. 後台 ---
 def show_admin_panel():
     st.title("⚙️ 資料管理後台")
     if not GOOGLE_API_KEY: st.error("❌ 未設定 API Key"); return
@@ -456,6 +453,7 @@ def show_admin_panel():
         with st.spinner("AI 解析中..."):
             img = Image.open(uploaded_file)
             try:
+                # 【修正】呼叫 ai_analyze_v86
                 json_text = ai_analyze_v86(img)
                 if "error" in json_text and len(json_text) < 100: st.error(f"API 錯誤: {json_text}")
                 else:
