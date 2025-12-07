@@ -17,7 +17,7 @@ except ImportError:
     from typing import TypedDict
 
 # --- 1. 頁面與 CSS (V74: 導航回歸 + 標題白字修復) ---
-st.set_page_config(layout="wide", page_title="StockTrack V101 準確計數版", page_icon="🔢")
+st.set_page_config(layout="wide", page_title="StockTrack V74 完整修復版", page_icon="🛠️")
 
 st.markdown("""
 <style>
@@ -51,8 +51,6 @@ st.markdown("""
     }
     .metric-value { font-size: 3.5rem !important; font-weight: 800; color: #2c3e50 !important; }
     .metric-label { font-size: 1.6rem !important; color: #555555 !important; font-weight: 700; }
-    /* 副標題樣式 */
-    .metric-sub { font-size: 1.2rem !important; color: #888888 !important; margin-top: 5px; font-weight: bold; }
 
     /* 5. 策略橫幅 (容器) */
     .strategy-banner {
@@ -228,6 +226,7 @@ def calculate_wind_streak(df, current_date_str):
             
     return streak
 
+
 def ai_analyze_v86(image):
     prompt = """
     你是一個精準的表格座標讀取器。請分析圖片中的每一行，回傳 JSON Array。
@@ -298,16 +297,8 @@ def calculate_monthly_stats(df):
     final_df = final_df.sort_values(['Month', 'Strategy', 'Count'], ascending=[False, True, False])
     return final_df
 
-# 【修改】支援副標題
-def render_metric_card(col, label, value, color_border="gray", sub_value=""):
-    sub_html = f'<div class="metric-sub">{sub_value}</div>' if sub_value else ""
-    col.markdown(f"""
-    <div class="metric-container" style="border-top: 5px solid {color_border};">
-        <div class="metric-label">{label}</div>
-        <div class="metric-value">{value}</div>
-        {sub_html}
-    </div>
-    """, unsafe_allow_html=True)
+def render_metric_card(col, label, value, color_border="gray"):
+    col.markdown(f"""<div class="metric-container" style="border-top: 5px solid {color_border};"><div class="metric-label">{label}</div><div class="metric-value">{value}</div></div>""", unsafe_allow_html=True)
 
 def render_stock_tags(stock_str):
     if pd.isna(stock_str) or not stock_str: return "<span style='color:#bdc3c7; font-size:1.2rem; font-weight:600;'>（無標的）</span>"
@@ -337,7 +328,7 @@ def show_dashboard():
 
     c1, c2, c3, c4 = st.columns(4)
     wind_status = day_data['wind']; wind_color = "#2ecc71"
-    
+
     # 計算持續天數 (修正後)
     wind_streak = calculate_wind_streak(df, selected_date)
     streak_text = f"已持續 {wind_streak} 天"
@@ -462,6 +453,11 @@ def show_admin_panel():
                                     if val_str not in seen: res.append(val_str); seen.add(val_str)
                             return "、".join(res)
                         
+                        # 這裡的映射邏輯較複雜，V86 已經使用更直觀的 col_XX，這裡直接硬對應
+                        # Col 01~05
+                        if not item.get("col_01"): continue
+                        
+                        # 輔助取值
                         def get_col_stocks(start, end):
                             res = []; seen = set()
                             for i in range(start, end + 1):
@@ -471,13 +467,13 @@ def show_admin_panel():
                                     if val_str not in seen: res.append(val_str); seen.add(val_str)
                             return "、".join(res)
 
-                        if not item.get("col_01"): continue
                         record = {
                             "date": str(item.get("col_01")).replace("/", "-"),
                             "wind": item.get("col_02", ""),
                             "part_time_count": item.get("col_03", 0),
                             "worker_strong_count": item.get("col_04", 0),
                             "worker_trend_count": item.get("col_05", 0),
+                            
                             "worker_strong_list": get_col_stocks(6, 8),
                             "worker_trend_list": get_col_stocks(9, 11),
                             "boss_pullback_list": get_col_stocks(12, 14),
@@ -503,13 +499,11 @@ def show_admin_panel():
     st.subheader("📝 歷史資料庫編輯")
     df = load_db()
     if not df.empty:
-        st.markdown("在此可修改所有歷史紀錄：")
         edited_history = st.data_editor(df, num_rows="dynamic", use_container_width=True)
         if st.button("💾 儲存變更"):
             save_full_history(edited_history)
             st.success("更新成功！"); time.sleep(1); st.rerun()
-        if st.button("🗑️ 清空資料庫 (慎用)"): clear_db(); st.warning("已清空"); st.rerun()
-    else: st.info("目前無資料")
+        if st.button("🗑️ 清空資料庫"): clear_db(); st.warning("已清空"); st.rerun()
 
 # --- 7. 主導航 ---
 def main():
@@ -518,6 +512,7 @@ def main():
 
     options = ["📊 戰情儀表板"]
     
+    # 密碼邏輯
     if not st.session_state.is_admin:
         with st.sidebar.expander("管理員登入"):
             pwd = st.text_input("密碼", type="password")
@@ -540,3 +535,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
