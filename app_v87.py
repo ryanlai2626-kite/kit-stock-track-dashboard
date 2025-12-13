@@ -1013,7 +1013,7 @@ def show_dashboard():
         for c in ['part_time_count', 'worker_strong_count', 'worker_trend_count']:
             all_counts.extend(chart_df[c].tolist())
         max_y = max(all_counts) if all_counts else 10
-        indicator_y = max_y * 1.15 # 設定在最大值上方 15% 的位置
+        indicator_y = max_y * 1.10 # 設定在最大值上方 15% 的位置
         
         # 風度顏色對應
         wind_color_map = {'強風': '#e74c3c', '亂流': '#9b59b6', '陣風': '#f1c40f', '無風': '#2ecc71'}
@@ -1322,3 +1322,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
