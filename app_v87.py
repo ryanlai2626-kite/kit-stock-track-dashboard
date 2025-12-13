@@ -21,8 +21,8 @@ try:
 except ImportError:
     from typing import TypedDict
 
-# --- 1. 頁面與 CSS (V150: 雲端環境強制修復版) ---
-st.set_page_config(layout="wide", page_title="StockTrack V150", page_icon="💰")
+# --- 1. 頁面與 CSS (V157: 風度整合折線圖版) ---
+st.set_page_config(layout="wide", page_title="StockTrack V157", page_icon="💰")
 
 st.markdown("""
 <style>
@@ -52,6 +52,30 @@ st.markdown("""
     .card-down { border-bottom: 4px solid #27ae60; background: linear-gradient(to bottom, #fff, #f0fdf4); }
     .card-flat { border-bottom: 4px solid #95a5a6; }
     
+    /* 趨勢定義卡片 (V153: 縮小優化版) */
+    .trend-card {
+        border-radius: 12px; /* 稍微減小圓角 */
+        padding: 10px;       /* 減少內距 (原本20px) */
+        color: white !important;
+        margin: 5px;
+        box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        height: 90%;
+        transition: transform 0.2s;
+    }
+    .trend-card:hover { transform: scale(1.02); }
+    .trend-icon { font-size: 2.0rem; margin-bottom: 5px; text-shadow: 0 1px 2px rgba(0,0,0,0.2); } /* 縮小 ICON (3rem -> 2rem) */
+    .trend-title { font-size: 1.8rem !important; font-weight: 800 !important; margin-bottom: 5px !important; color: white !important; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+    .trend-desc { font-size: 1.2rem !important; font-weight: 500 !important; line-height: 1.4; color: rgba(255,255,255,0.95) !important; }
+    
+    /* 漸層背景 */
+    .bg-strong { background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%); } /* 紅色系 */
+    .bg-chaos { background: linear-gradient(135deg, #834d9b 0%, #d04ed6 100%); } /* 紫色系 */
+    .bg-weak { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }   /* 綠色系 */
+
     /* 股票標籤 */
     .stock-tag { 
         display: inline-block; background-color: #FFFFFF; color: #2c3e50 !important; 
@@ -144,6 +168,7 @@ BACKUP_FILE = 'stock_data_backup.csv'
 # --- 3. 核心資料庫 (MASTER_STOCK_DB) ---
 MASTER_STOCK_DB = {
     # 修正錯誤與新增
+    "1560": ("中砂", "再生晶圓/鑽石碟"), 
     "3551": ("世禾", "半導體設備"), "3715": ("定穎投控", "PCB"),
     "2404": ("漢唐", "無塵室/廠務"), "3402": ("漢科", "廠務設備"),
     
@@ -224,7 +249,7 @@ FORCE_FIX_SECTOR = {
     "神達": "伺服器", "宏碩系統": "微波設備", "竹陞科技": "智能工廠", "宇瞻": "記憶體模組",
     "群翊": "PCB設備", "鼎炫-KY": "EMI材料", "博智": "PCB/伺服器板", "定穎投控": "PCB",
     "藥華藥": "生技新藥", "川湖": "伺服器導軌", "鈺邦": "被動元件", "金居": "CCL銅箔/材料",
-    "世禾": "半導體設備", "漢唐": "無塵室/廠務", "漢科": "廠務設備"
+    "世禾": "半導體設備", "漢唐": "無塵室/廠務", "漢科": "廠務設備", "中砂": "再生晶圓/鑽石碟"
 }
 
 # --- 智慧查找函式 ---
@@ -412,98 +437,67 @@ def get_global_market_data():
         print(f"Global Market Data Error: {e}")
         return []
 
-# --- V150: 恐懼與貪婪指數 (Header偽裝 + 錯誤處理) ---
-@st.cache_data(ttl=3600)
+# --- 恐懼與貪婪指數 (V154: 結構相容修復版) ---
+@st.cache_data(ttl=300) 
 def get_cnn_fear_greed_full():
-    """
-    抓取 CNN Fear & Greed Index 完整歷史資料 (Header增強 + 型態安全版)
-    """
     url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
-    
-    # 模擬真實瀏覽器 Header (User-Agent Rotation 概念)
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Referer": "https://www.cnn.com/",
         "Origin": "https://www.cnn.com",
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "en-US,en;q=0.9",
         "Connection": "keep-alive",
-        "Sec-Fetch-Dest": "empty",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Site": "same-site"
+        "Cache-Control": "no-cache", 
+        "Pragma": "no-cache"
     }
-    
     try:
-        r = requests.get(url, headers=headers, timeout=10) # 延長 Timeout
+        r = requests.get(url, headers=headers, timeout=10)
         if r.status_code == 200:
             data = r.json()
             
-            # 安全轉型
-            def safe_get_score(val):
-                try: return int(float(val))
+            # 保留小數點後 1 位
+            def safe_num(v): 
+                try: return round(float(v), 1)
                 except: return 50
                 
-            def safe_get_timestamp(val):
-                try: return float(val)
+            def safe_ts(v):
+                try: return float(v)
                 except: return None
             
-            # 1. 目前數值
             fg_obj = data.get('fear_and_greed', {})
-            current_score = safe_get_score(fg_obj.get('score', 50))
-            current_rating = fg_obj.get('rating', 'Neutral')
-            timestamp = safe_get_timestamp(fg_obj.get('timestamp'))
+            current_score = safe_num(fg_obj.get('score', 50))
+            timestamp = safe_ts(fg_obj.get('timestamp'))
             
-            # 2. 歷史趨勢計算
             history_data = data.get('fear_and_greed_historical', {}).get('data', [])
             
-            # Helper to find closest score to a past date
-            def get_score_days_ago(days):
+            # 搜尋歷史數據 helper
+            def get_past(days):
                 if not history_data: return None, None
-                target_ts = (datetime.now() - timedelta(days=days)).timestamp() * 1000
-                
-                def get_x(item): 
-                    try: return float(item['x']) 
-                    except: return 0.0
-                    
-                if not history_data: return None, None
-                closest = min(history_data, key=lambda item: abs(get_x(item) - target_ts))
-                
-                try:
-                    score = int(float(closest['y']))
-                    ts = float(closest['x'])
-                    dt_str = datetime.fromtimestamp(ts/1000).strftime('%Y/%m/%d')
-                    return score, dt_str
-                except:
-                    return None, None
+                target = (datetime.now() - timedelta(days=days)).timestamp() * 1000
+                closest = min(history_data, key=lambda x: abs((float(x['x']) if 'x' in x else 0) - target))
+                try: 
+                    return round(float(closest['y']), 1), datetime.fromtimestamp(float(closest['x'])/1000).strftime('%Y/%m/%d')
+                except: return None, None
 
-            prev_close, prev_date = get_score_days_ago(1)
-            week_ago, week_date = get_score_days_ago(7)
-            month_ago, month_date = get_score_days_ago(30)
-            year_ago, year_date = get_score_days_ago(365)
+            p_sc, p_dt = get_past(1)
+            w_sc, w_dt = get_past(7)
+            m_sc, m_dt = get_past(30)
+            y_sc, y_dt = get_past(365)
             
-            date_display = ""
-            if timestamp:
-                date_display = datetime.fromtimestamp(timestamp/1000).strftime('%Y/%m/%d')
+            date_str = datetime.fromtimestamp(timestamp/1000).strftime('%Y/%m/%d') if timestamp else ""
             
+            # V154 Fix: 改回 Dictionary 結構以符合您的 render_global_markets 函式
             return {
                 "score": current_score,
-                "rating": current_rating,
-                "date": date_display,
+                "date": date_str,
                 "history": {
-                    "prev": {"score": prev_close, "date": prev_date},
-                    "week": {"score": week_ago, "date": week_date},
-                    "month": {"score": month_ago, "date": month_date},
-                    "year": {"score": year_ago, "date": year_date}
+                    "prev": {"score": p_sc, "date": p_dt},
+                    "week": {"score": w_sc, "date": w_dt},
+                    "month": {"score": m_sc, "date": m_dt},
+                    "year": {"score": y_sc, "date": y_dt}
                 }
             }
-        elif r.status_code == 403:
-            return {"error": "CNN拒絕存取 (403 Forbidden - Cloud Block)"}
-        else:
-            return {"error": f"HTTP {r.status_code}"}
-    except requests.exceptions.Timeout:
-        return {"error": "連線逾時 (Timeout)"}
-    except Exception as e:
-        return {"error": str(e)}
+        return {"error": f"HTTP {r.status_code}"}
+    except Exception as e: return {"error": str(e)}
 
 def get_rating_label_cn(score):
     if score is None: return "未知", "#95a5a6"
@@ -514,14 +508,15 @@ def get_rating_label_cn(score):
     else: return "極度貪婪", "#27ae60" # Dark Green
 
 def plot_fear_greed_gauge(score):
+    # 【需求1】字體美化並放大
     fig = go.Figure(go.Indicator(
         mode = "gauge+number",
         value = score,
-        number = {'font': {'size': 40, 'color': '#333'}},
+        number = {'font': {'size': 80, 'color': '#2c3e50', 'family': 'Impact'}}, # 放大至 80, 使用 Impact 字體
         domain = {'x': [0, 1], 'y': [0, 1]},
-        title = {'text': "市場情緒指標", 'font': {'size': 14, 'color': '#666'}},
+        title = {'text': "市場情緒指標", 'font': {'size': 18, 'color': '#666', 'weight': 'bold'}},
         gauge = {
-            'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "#333"},
+            'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "#333", 'tickfont': {'size': 14}},
             'bar': {'color': "#2c3e50", 'thickness': 0.15}, # 指針顏色
             'bgcolor': "white",
             'borderwidth': 0,
@@ -539,7 +534,7 @@ def plot_fear_greed_gauge(score):
             }
         }
     ))
-    fig.update_layout(height=250, margin=dict(l=20, r=20, t=30, b=20), paper_bgcolor='rgba(0,0,0,0)', font={'family': "Arial"})
+    fig.update_layout(height=300, margin=dict(l=20, r=20, t=40, b=20), paper_bgcolor='rgba(0,0,0,0)', font={'family': "Arial"})
     return fig
 
 def render_global_markets():
@@ -575,7 +570,8 @@ def render_global_markets():
         with c1:
             st.plotly_chart(plot_fear_greed_gauge(fg_data['score']), use_container_width=True)
             lbl, color = get_rating_label_cn(fg_data['score'])
-            st.markdown(f"<div style='text-align:center; font-weight:bold; font-size:1.5rem; color:{color};'>{lbl}</div>", unsafe_allow_html=True)
+            # 【需求1】美化字體: 放大、加陰影
+            st.markdown(f"<div style='text-align:center; font-weight:900; font-size:2.2rem; color:{color}; text-shadow: 1px 1px 2px rgba(0,0,0,0.2); margin-top: -10px;'>{lbl}</div>", unsafe_allow_html=True)
             
         # 右側：歷史數據表
         with c2:
@@ -734,6 +730,16 @@ def render_metric_card(col, label, value, color_border="gray", sub_value=""):
         <div class="metric-label">{label}</div>
         <div class="metric-value">{value}</div>
         {sub_html}
+    </div>
+    """, unsafe_allow_html=True)
+
+# 【需求2】趨勢定義卡片函數 (V153: 微調版)
+def render_trend_card(col, title, desc, bg_class, icon):
+    col.markdown(f"""
+    <div class="trend-card {bg_class}">
+        <div class="trend-icon">{icon}</div>
+        <div class="trend-title">{title}</div>
+        <div class="trend-desc">{desc}</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -980,20 +986,162 @@ def show_dashboard():
     legend_config = alt.Legend(orient='top', labelFontSize=16, titleFontSize=20, labelColor='#333333', titleColor='#333333')
 
     with tab1:
-        melted_df = chart_df.melt(id_vars=['date'], value_vars=['part_time_count', 'worker_strong_count', 'worker_trend_count'], var_name='category', value_name='count')
-        name_map = {'part_time_count': '打工型風箏', 'worker_strong_count': '上班族強勢週', 'worker_trend_count': '上班族週趨勢'}
-        melted_df['category'] = melted_df['category'].map(name_map)
-        bar_chart = alt.Chart(melted_df).mark_bar(opacity=0.9).encode(x=alt.X('date:O', title='日期', axis=axis_config), y=alt.Y('count:Q', title='數量', axis=axis_config), color=alt.Color('category:N', title='指標', legend=legend_config), xOffset='category:N', tooltip=['date', 'category', 'count']).properties(height=450).configure(background='white').interactive()
-        st.altair_chart(bar_chart, use_container_width=True)
+        # 【需求1 & 新需求】圓滑折線圖 + 風度標示整合
+        # 使用 Plotly 以確保美觀與可讀性 (白底黑字)
+        fig_line = go.Figure()
+        
+        # 1. 繪製三條數據線
+        lines_config = [
+            {"col": "part_time_count", "name": "打工型風箏", "color": "#f39c12"},
+            {"col": "worker_strong_count", "name": "上班族強勢週", "color": "#3498db"},
+            {"col": "worker_trend_count", "name": "上班族週趨勢", "color": "#9b59b6"}
+        ]
+        
+        for cfg in lines_config:
+            fig_line.add_trace(go.Scatter(
+                x=chart_df['date'], 
+                y=chart_df[cfg['col']],
+                name=cfg['name'],
+                mode='lines+markers', # 顯示線條與點
+                line=dict(shape='spline', smoothing=1.3, width=3, color=cfg['color']), # 設定為圓滑曲線 (Spline)
+                marker=dict(size=8, symbol='circle')
+            ))
+            
+        # 2. 【新功能】加入「風向球」標示層
+        # 計算 Y 軸最大值，決定風向球的高度位置
+        all_counts = []
+        for c in ['part_time_count', 'worker_strong_count', 'worker_trend_count']:
+            all_counts.extend(chart_df[c].tolist())
+        max_y = max(all_counts) if all_counts else 10
+        indicator_y = max_y * 1.15 # 設定在最大值上方 15% 的位置
+        
+        # 風度顏色對應
+        wind_color_map = {'強風': '#e74c3c', '亂流': '#9b59b6', '陣風': '#f1c40f', '無風': '#2ecc71'}
+        
+        # 準備風度數據
+        wind_colors = [wind_color_map.get(str(w).strip(), '#999') for w in chart_df['wind']]
+        wind_texts = [str(w).strip()[0] if str(w).strip() else "?" for w in chart_df['wind']] # 取首字 (強, 亂...)
+        
+        fig_line.add_trace(go.Scatter(
+            x=chart_df['date'],
+            y=[indicator_y] * len(chart_df), # 懸浮在上方
+            mode='markers+text',
+            name='當日風度',
+            text=wind_texts,
+            textposition="top center",
+            textfont=dict(size=14, color='#333', family='Arial Black'),
+            marker=dict(size=14, color=wind_colors, symbol='circle', line=dict(width=1, color='#333')),
+            hoverinfo='text',
+            hovertext=[f"日期: {d}<br>風度: {w}" for d, w in zip(chart_df['date'], chart_df['wind'])]
+        ))
+            
+        fig_line.update_layout(
+            template="plotly_white",
+            height=500, #稍微加高以容納風度標示
+            paper_bgcolor='white',
+            plot_bgcolor='white',
+            font=dict(family="Arial, sans-serif", size=16, color='#000000'),
+            xaxis=dict(
+                title="日期",
+                title_font=dict(size=20, weight='bold', color='#000000'),
+                tickfont=dict(size=16, color='#000000'),
+                gridcolor='#d4d4d4',
+                showline=True,
+                linecolor='#000000'
+            ),
+            yaxis=dict(
+                title="數量",
+                title_font=dict(size=20, weight='bold', color='#000000'),
+                tickfont=dict(size=16, color='#000000'),
+                gridcolor='#d4d4d4',
+                showline=True,
+                linecolor='#000000',
+                range=[0, max_y * 1.25] # 預留頂部空間給風向球
+            ),
+            legend=dict(
+                orientation="h", 
+                yanchor="bottom", y=1.02, 
+                xanchor="right", x=1,
+                font=dict(size=16, color='#000000')
+            ),
+            hovermode="x unified"
+        )
+        st.plotly_chart(fig_line, use_container_width=True)
+    
     with tab2:
+        # 【需求2】市場觀察趨勢定義美化 (縮小版)
+        st.markdown("#### 🌬️ 市場觀察趨勢定義")
+        wc1, wc2, wc3 = st.columns(3)
+        with wc1: render_trend_card(wc1, "強風/亂流循環", "易漲行情<br>股價走勢較有延續性<br>(打工/上班型)", "bg-strong", "🔥")
+        with wc2: render_trend_card(wc2, "循環的交界", "待觀察<br>行情沒有明確方向<br>(等方向出來再積極)", "bg-chaos", "🌪️")
+        with wc3: render_trend_card(wc3, "陣風/無風循環", "易跌行情<br>股價走勢難有延續性<br>(老闆/成長型)", "bg-weak", "🍃")
+        
         wind_order = ['強風', '亂流', '陣風', '無風'] 
         wind_chart = alt.Chart(chart_df).mark_circle(size=600, opacity=1).encode(x=alt.X('date:O', title='日期', axis=axis_config), y=alt.Y('wind:N', title='風度', sort=wind_order, axis=axis_config), color=alt.Color('wind:N', title='狀態', legend=legend_config, scale=alt.Scale(domain=['無風', '陣風', '亂流', '強風'], range=['#2ecc71', '#f1c40f', '#9b59b6', '#e74c3c'])), tooltip=['date', 'wind']).properties(height=400).configure(background='white').interactive()
         st.altair_chart(wind_chart, use_container_width=True)
+        
     with tab3:
-        monthly_wind = chart_df.groupby(['Month', 'wind']).size().reset_index(name='days')
-        group_order = ['無風', '陣風', '亂流', '強風']
-        grouped_chart = alt.Chart(monthly_wind).mark_bar().encode(x=alt.X('Month:O', title='月份', axis=axis_config), y=alt.Y('days:Q', title='天數', axis=axis_config), color=alt.Color('wind:N', title='風度', sort=group_order, scale=alt.Scale(domain=['無風', '陣風', '亂流', '強風'], range=['#2ecc71', '#f1c40f', '#9b59b6', '#e74c3c']), legend=legend_config), xOffset=alt.XOffset('wind:N', sort=group_order), tooltip=['Month', 'wind', 'days']).properties(height=450).configure(background='white').interactive()
-        st.altair_chart(grouped_chart, use_container_width=True)
+        # 【需求3】改用 Plotly 解決渲染問題並實現分組柱狀圖 (V155: 強制黑色字體 + Plotly White Template)
+        monthly_wind = chart_df.groupby(['Month', 'wind']).size().reset_index(name='count')
+        
+        # 顏色對應
+        color_map = {'無風': '#2ecc71', '陣風': '#f1c40f', '亂流': '#9b59b6', '強風': '#e74c3c'}
+        wind_types = ['無風', '陣風', '亂流', '強風']
+        
+        fig = go.Figure()
+        
+        for w_type in wind_types:
+            # 篩選數據
+            sub_df = monthly_wind[monthly_wind['wind'] == w_type]
+            if not sub_df.empty:
+                fig.add_trace(go.Bar(
+                    x=sub_df['Month'],
+                    y=sub_df['count'],
+                    name=w_type,
+                    marker_color=color_map.get(w_type, '#333'),
+                    marker_line_width=1.5, # 增加邊框讓它看起來更立體
+                    marker_line_color='rgba(0,0,0,0.2)',
+                    opacity=0.9
+                ))
+
+        fig.update_layout(
+            template="plotly_white", # 強制使用白色主題，清除深色模式干擾
+            barmode='group', # 關鍵：這會讓柱子並排顯示 (Side-by-Side)
+            height=450,
+            # Fix 1: 背景白化
+            paper_bgcolor='white',
+            plot_bgcolor='white',
+            # Fix 2: 全域字體強制黑色 (#000000)
+            font=dict(family="Arial, sans-serif", size=16, color='#000000'),
+            xaxis=dict(
+                title="月份",
+                # Fix 3: 強制使用類別型態，避免被解析為日期
+                type='category', 
+                title_font=dict(size=20, weight='bold', color='#000000'),
+                tickfont=dict(size=16, color='#000000'),
+                gridcolor='#d4d4d4', # 稍微深一點的灰色網格
+                showline=True,       # 顯示軸線
+                linecolor='#000000'  # 軸線顏色
+            ),
+            yaxis=dict(
+                title="天數",
+                title_font=dict(size=20, weight='bold', color='#000000'),
+                tickfont=dict(size=16, color='#000000'),
+                gridcolor='#d4d4d4',
+                showline=True,
+                linecolor='#000000'
+            ),
+            legend=dict(
+                orientation="h", 
+                yanchor="bottom", y=1.02, 
+                xanchor="right", x=1,
+                font=dict(size=16, color='#000000')
+            ),
+            margin=dict(l=20, r=20, t=50, b=20),
+            hovermode="x unified"
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
 
     st.markdown("---")
     st.header("🏆 策略選股月度風雲榜")
