@@ -1357,6 +1357,45 @@ def show_dashboard():
         else:
             st.warning("⚠️ 無資料，請確認 CSV 是否已上傳。")
 
+    st.markdown("---")
+    st.header("🏆 策略選股月度風雲榜")
+    st.caption("統計各策略下，股票出現的次數與所屬族群。")
+    stats_df = calculate_monthly_stats(df)
+    if not stats_df.empty:
+        month_list = stats_df['Month'].unique()
+        selected_month = st.selectbox("選擇統計月份", options=month_list)
+        filtered_stats = stats_df[stats_df['Month'] == selected_month]
+        strategies_list = filtered_stats['Strategy'].unique()
+        cols1 = st.columns(3); cols2 = st.columns(3)
+        for i, strategy in enumerate(strategies_list):
+            strat_data = filtered_stats[filtered_stats['Strategy'] == strategy].head(10)
+            col_config = {"stock": "股票名稱", "Count": st.column_config.ProgressColumn("出現次數", format="%d次", min_value=0, max_value=int(strat_data['Count'].max()) if not strat_data.empty else 1), "Industry": st.column_config.TextColumn("族群", help="所屬產業類別")}
+            if i < 3:
+                with cols1[i]:
+                    st.subheader(f"{strategy}")
+                    st.dataframe(strat_data[['stock', 'Count', 'Industry']], hide_index=True, use_container_width=True, column_config=col_config)
+            else:
+                with cols2[i-3]:
+                    st.subheader(f"{strategy}")
+                    st.dataframe(strat_data[['stock', 'Count', 'Industry']], hide_index=True, use_container_width=True, column_config=col_config)
+    else: st.info("累積足夠資料後，將在此顯示統計排行。")
+
+    st.markdown("---")
+    st.header("🔥 今日市場重點監控 (權值股/熱門股 成交值排行)")
+    st.caption("資料來源：Yahoo 股市 (即時爬蟲) / Yahoo Finance (備援) | 單位：億元")
+    
+    with st.spinner("正在計算最新成交資料..."):
+        # 【V132】統一使用 get_yahoo_realtime_rank (爬蟲優先)
+        rank_df = get_yahoo_realtime_rank(20)
+        
+        if isinstance(rank_df, pd.DataFrame) and not rank_df.empty:
+            max_turnover = rank_df['成交值(億)'].max()
+            safe_max = int(max_turnover) if max_turnover > 0 else 1
+            st.dataframe(rank_df, hide_index=True, use_container_width=True, column_config={"排名": st.column_config.NumberColumn("#", width="small"), "代號": st.column_config.TextColumn("代號"), "名稱": st.column_config.TextColumn("名稱", width="medium"), "股價": st.column_config.NumberColumn("股價", format="$%.2f"), "漲跌幅%": st.column_config.NumberColumn("漲跌幅", format="%.2f%%", help="日漲跌幅估算"), "成交值(億)": st.column_config.ProgressColumn("成交值 (億)", format="$%.2f億", min_value=0, max_value=safe_max), "市場": st.column_config.TextColumn("市場", width="small"), "族群": st.column_config.TextColumn("族群"), "來源": st.column_config.TextColumn("來源", width="small")})
+        else: 
+            # 備援：舊混合模式
+            st.warning("⚠️ 無法取得即時排行，顯示歷史數據")
+
 # --- 6. 頁面視圖：管理後台 (後台) ---
 def show_admin_panel():
     st.title("⚙️ 資料管理後台")
@@ -1556,3 +1595,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
