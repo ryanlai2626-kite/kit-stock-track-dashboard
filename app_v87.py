@@ -1334,7 +1334,7 @@ def show_dashboard():
     st.markdown("---")
     
     # --- 【需求2】常用連結與好朋友區塊 ---
-    with st.expander("🔗 常用連結與好朋友推薦 (Useful Links)", expanded=False):
+    with st.expander("🔗 常用連結與好朋友推薦 (Useful Links)", expanded=TrueT:
         col_l1, col_l2, col_l3 = st.columns(3)
         
         with col_l1:
@@ -1554,3 +1554,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
