@@ -1102,8 +1102,8 @@ def show_dashboard():
             margin: 0 !important;
         }
 
-        .m-label { font-size: 1.6rem; color: #666; font-weight: 600; margin-bottom: 5px; }
-        .m-value { font-size: 2.5rem; font-weight: 800; color: #2c3e50; margin: 0; line-height: 1.2; }
+        .m-label { font-size: 1.5rem; color: #666; font-weight: 600; margin-bottom: 5px; }
+        .m-value { font-size: 2.4rem; font-weight: 800; color: #2c3e50; margin: 0; line-height: 1.2; }
         .m-sub { font-size: 0.9rem; color: #888; font-weight: bold; margin-top: 5px; }
     </style>
     """, unsafe_allow_html=True)
@@ -1912,3 +1912,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
