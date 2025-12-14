@@ -541,72 +541,119 @@ def plot_fear_greed_gauge(score):
 def render_global_markets():
     st.markdown("### 🌏 全球重要指數 (Real-time)")
     
-    # 1. 上半部：全球指數卡片
+    # 取得資料
     markets = get_global_market_data()
-    cols = st.columns(min(len(markets), 7) if markets else 1)
-    for i, m in enumerate(markets):
-        with cols[i]:
-            st.markdown(f"""
-            <div class="market-card {m['card_class']}">
-                <div class="market-name">{m['name']}</div>
-                <div class="market-price {m['color_class']}">{m['price']}</div>
-                <div class="market-change {m['color_class']}">{m['change']:+.2f} ({m['pct_change']:+.2f}%)</div>
-            </div>
-            """, unsafe_allow_html=True)
+    
+    if markets:
+        # 1. 定義 CSS (強制橫向排列 + 隱藏 Code Block 風格)
+        # 注意：這裡使用 st.markdown 注入 style
+        st.markdown("""
+        <style>
+            /* 容器：強制水平排列、不換行、可滑動 */
+            div.market-scroll-container {
+                display: flex !important;
+                flex-direction: row !important;
+                flex-wrap: nowrap !important;
+                overflow-x: auto !important;
+                align-items: center !important;
+                gap: 15px !important;
+                padding: 10px 0px 15px 0px !important; /* 底部預留捲軸空間 */
+                width: 100% !important;
+                -webkit-overflow-scrolling: touch;
+            }
             
+            /* 卡片：固定寬度、不壓縮 */
+            div.market-scroll-container .market-card {
+                flex: 0 0 auto !important;
+                width: 160px !important;
+                min-width: 160px !important;
+                background-color: #FFFFFF !important;
+                border-radius: 10px !important;
+                padding: 15px !important;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.08) !important;
+                border: 1px solid #EAEAEA !important;
+                text-align: center !important;
+                margin: 0 !important;
+            }
+
+            /* 確保內容文字正確顯示 */
+            .market-name { font-size: 1.0rem; font-weight: bold; color: #555; margin-bottom: 5px; }
+            .market-price { font-size: 1.6rem; font-weight: 900; margin: 5px 0; }
+            .market-change { font-size: 1.0rem; font-weight: 700; }
+            
+            /* 漲跌顏色定義 */
+            .up-color { color: #e74c3c !important; }
+            .down-color { color: #27ae60 !important; }
+            .flat-color { color: #7f8c8d !important; }
+            
+            /* 卡片底部線條顏色 */
+            .card-up { border-bottom: 4px solid #e74c3c !important; }
+            .card-down { border-bottom: 4px solid #27ae60 !important; }
+            .card-flat { border-bottom: 4px solid #95a5a6 !important; }
+
+            /* 隱藏醜醜的捲軸但保留功能 */
+            div.market-scroll-container::-webkit-scrollbar { height: 4px; }
+            div.market-scroll-container::-webkit-scrollbar-thumb { background-color: #ccc; border-radius: 4px; }
+        </style>
+        """, unsafe_allow_html=True)
+
+        # 2. 組合 HTML (關鍵修改：移除所有縮排，避免被當成程式碼區塊)
+        # 我們先建立容器的開頭
+        full_html = '<div class="market-scroll-container">'
+        
+        for m in markets:
+            # 這裡使用單行字串拼接，確保沒有多餘的換行或縮排
+            card_html = (
+                f'<div class="market-card {m["card_class"]}">'
+                f'<div class="market-name">{m["name"]}</div>'
+                f'<div class="market-price {m["color_class"]}">{m["price"]}</div>'
+                f'<div class="market-change {m["color_class"]}">{m["change"]:+.2f} ({m["pct_change"]:+.2f}%)</div>'
+                f'</div>'
+            )
+            full_html += card_html
+            
+        # 容器結尾
+        full_html += '</div>'
+        
+        # 3. 一次性渲染
+        st.markdown(full_html, unsafe_allow_html=True)
+    
+    else:
+        st.info("⏳ 指數資料讀取中...")
+
     st.divider()
 
-    # 2. 下半部：恐懼貪婪指數儀表板 (V150: 含除錯模式)
+    # --- 下半部：恐懼貪婪 (保持不變) ---
     fg_data = get_cnn_fear_greed_full()
     
     st.subheader("😱 恐懼與貪婪指數 (Fear & Greed Index)")
 
-    # V150 Fix: 如果 API 失敗，顯示錯誤原因或 Fallback，而不是隱形
     if fg_data and "error" in fg_data:
-        st.warning(f"⚠️ 無法取得 CNN 即時數據 (原因: {fg_data['error']})。可能是因為雲端主機 IP 被新聞網站防火牆阻擋。建議稍後再試。")
+        st.warning(f"⚠️ 無法取得 CNN 數據: {fg_data['error']}")
     elif fg_data:
         c1, c2 = st.columns([1, 1])
-        
-        # 左側：儀表板
         with c1:
             st.plotly_chart(plot_fear_greed_gauge(fg_data['score']), use_container_width=True)
             lbl, color = get_rating_label_cn(fg_data['score'])
-            # 【需求1】美化字體: 放大、加陰影
             st.markdown(f"<div style='text-align:center; font-weight:900; font-size:2.2rem; color:{color}; text-shadow: 1px 1px 2px rgba(0,0,0,0.2); margin-top: -10px;'>{lbl}</div>", unsafe_allow_html=True)
-            
-        # 右側：歷史數據表
         with c2:
             st.markdown("#### 市場情緒變化趨勢")
-            st.caption("對比不同期間的市場情緒，掌握情緒變化趨勢")
+            # 簡化重複的 HTML 生成
+            rows_html = ""
+            def make_row(title, date, score):
+                l, c = get_rating_label_cn(score)
+                return f"<div class='fg-history-row'><div style='flex:2;'><b>{title}</b><br><small>{date}</small></div><div style='flex:1;text-align:right;'><span style='background:{c};color:#fff;padding:2px 5px;border-radius:3px;font-size:12px;'>{l}</span> <b style='font-size:18px;'>{score}</b></div></div>"
             
-            # Helper render function
-            def render_row(title, date_str, score):
-                label, color = get_rating_label_cn(score)
-                return f"""
-                <div class="fg-history-row">
-                    <div style="flex:2;">
-                        <div style="font-weight:bold; color:#333;">{title}</div>
-                        <div style="color:#888; font-size:12px;">{date_str}</div>
-                    </div>
-                    <div style="flex:1; display:flex; align-items:center; justify-content:flex-end;">
-                        <span style="background-color:{color}; color:white; padding:2px 8px; border-radius:4px; font-size:12px; margin-right:8px;">{label}</span>
-                        <span style="font-weight:900; font-size:18px; color:#333; min-width:30px; text-align:right;">{score}</span>
-                    </div>
-                </div>
-                """
+            rows_html += make_row("當日", fg_data['date'], fg_data['score'])
+            h = fg_data['history']
+            if h['prev']['score']: rows_html += make_row("前一交易日", h['prev']['date'], h['prev']['score'])
+            if h['week']['score']: rows_html += make_row("一週前", h['week']['date'], h['week']['score'])
+            if h['month']['score']: rows_html += make_row("一個月前", h['month']['date'], h['month']['score'])
+            if h['year']['score']: rows_html += make_row("一年前", h['year']['date'], h['year']['score'])
             
-            html_content = ""
-            html_content += render_row("當日", fg_data['date'], fg_data['score'])
-            
-            hist = fg_data['history']
-            if hist['prev']['score']: html_content += render_row("前一交易日", hist['prev']['date'], hist['prev']['score'])
-            if hist['week']['score']: html_content += render_row("一週前", hist['week']['date'], hist['week']['score'])
-            if hist['month']['score']: html_content += render_row("一個月前", hist['month']['date'], hist['month']['score'])
-            if hist['year']['score']: html_content += render_row("一年前", hist['year']['date'], hist['year']['score'])
-            
-            st.markdown(html_content, unsafe_allow_html=True)
+            st.markdown(rows_html, unsafe_allow_html=True)
     else:
-        st.info("⏳ 正在連線至 CNN 伺服器，請稍候... (若長時間未顯示，請重新整理)")
+        st.info("連線中...")
 
     st.divider()
 
@@ -1020,7 +1067,7 @@ def show_dashboard():
                 name=cfg['name'],
                 mode='lines+markers', # 顯示線條與點
                 line=dict(shape='spline', smoothing=1.3, width=3, color=cfg['color']), # 設定為圓滑曲線 (Spline)
-                marker=dict(size=8, symbol='circle')
+                marker=dict(size=7, symbol='circle')
             ))
             
         # 2. 【新功能】加入「風向球」標示層
@@ -1029,7 +1076,7 @@ def show_dashboard():
         for c in ['part_time_count', 'worker_strong_count', 'worker_trend_count']:
             all_counts.extend(chart_df[c].tolist())
         max_y = max(all_counts) if all_counts else 10
-        indicator_y = max_y * 1.15 # 設定在最大值上方 15% 的位置
+        indicator_y = max_y * 1.10 # 設定在最大值上方 15% 的位置
         
         # 風度顏色對應
         wind_color_map = {'強風': '#e74c3c', '亂流': '#9b59b6', '陣風': '#f1c40f', '無風': '#2ecc71'}
@@ -1045,8 +1092,8 @@ def show_dashboard():
             name='當日風度',
             text=wind_texts,
             textposition="top center",
-            textfont=dict(size=14, color='#333', family='Arial Black'),
-            marker=dict(size=14, color=wind_colors, symbol='circle', line=dict(width=1, color='#333')),
+            textfont=dict(size=13, color='#333', family='Arial Black'),
+            marker=dict(size=15, color=wind_colors, symbol='circle', line=dict(width=1, color='#333')),
             hoverinfo='text',
             hovertext=[f"日期: {d}<br>風度: {w}" for d, w in zip(chart_df['date'], chart_df['wind'])]
         ))
@@ -1284,7 +1331,7 @@ def show_dashboard():
                 
                 .mc-lbl { font-size: 18px; font-weight: bold; color: #555; margin-bottom: 5px; }
                 .mc-val { font-size: 22px; font-weight: 800; color: #2c3e50; margin: 2px 0; font-family: Arial, sans-serif; }
-                .mc-sub { font-size: 11px; color: #888; margin-top: 2px; }
+                .mc-sub { font-size: 12px; color: #888; margin-top: 2px; }
                 .p-bg { width: 100%; height: 4px; background: #f1f2f6; border-radius: 2px; margin-top: 8px; overflow: hidden; margin-left: auto; margin-right: auto; }
                 .p-fill { height: 100%; border-radius: 2px; }
             </style>
@@ -1321,9 +1368,10 @@ def show_dashboard():
 
             if '收' in hist_df.columns:
                 fig.add_trace(go.Scatter(x=hist_df['日期'], y=hist_df['收'], mode='lines', name='加權指數', line=dict(color='#2c3e50', width=2.5)))
+		
             if 'MA20' in hist_df.columns:
                 fig.add_trace(go.Scatter(x=hist_df['日期'], y=hist_df['MA20'], mode='lines', name='20MA', line=dict(color='#8e44ad', width=2, dash='dash')))
-            
+		            
             hover_text = []
             for idx, row in hist_df.iterrows():
                 raw_dir = row.get(target_col, row.get('風度', '')) if target_col else row.get('風度', '')
@@ -1595,4 +1643,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
