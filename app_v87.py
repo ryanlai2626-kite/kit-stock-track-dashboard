@@ -1202,15 +1202,27 @@ def show_dashboard():
             st.caption("🔴 積極(強風-亂流循環) | 🟡 無方向(循環邊界) | 🟢 保守(無風-陣風循環)")
         else: st.warning("⚠️ 無資料，請確認 CSV 是否已上傳。")
 
-# --- 新增 Tab 4: 風度指數光譜 (優化版) ---
+# --- 新增 Tab 4: 風度指數光譜 (優化版 + MA20) ---
 
     with tab4:
         st.markdown("#### 🌪️ 風度指數光譜 (Trend Spectrum)")
-        st.caption("🌈 線上的顏色代表當日的風度：🔴強風 🟣亂流 🟡陣風 🟢無風。")
+        st.caption("🌈 線上的顏色代表當日的風度：🔴強風 🟣亂流 🟡陣風 🟢無風。🟣虛線為 20MA (月線)。")
         
         hist_df_corr = load_history_data()
         
         if not hist_df_corr.empty:
+            # --- 0. 資料預處理：計算或讀取 MA20 ---
+            # 確保日期排序正確
+            hist_df_corr = hist_df_corr.sort_values('日期', ascending=True).reset_index(drop=True)
+            
+            # 嘗試讀取現有的 20MA 欄位，若無則自動計算
+            col_20ma = next((c for c in hist_df_corr.columns if '20ma' in c.lower().replace(' ', '')), None)
+            if col_20ma:
+                hist_df_corr['MA20'] = pd.to_numeric(hist_df_corr[col_20ma], errors='coerce')
+            else:
+                # 自動計算 20MA
+                hist_df_corr['MA20'] = hist_df_corr['收'].rolling(window=20, min_periods=1).mean()
+
             # 1. 顏色映射
             wind_colors_map = {'強風': '#e74c3c', '亂流': '#9b59b6', '陣風': '#f1c40f', '無風': '#2ecc71'}
             point_colors = [wind_colors_map.get(str(w).strip(), '#999') for w in hist_df_corr['風度']]
@@ -1218,17 +1230,27 @@ def show_dashboard():
             # 2. 建立圖表
             fig_spectrum = go.Figure()
             
-            # Layer 1: 底層灰色連線 (顯示軌跡) - 改為 spline (圓滑)
+            # Layer 1: 底層灰色連線 (顯示軌跡)
             fig_spectrum.add_trace(go.Scatter(
                 x=hist_df_corr['日期'], 
                 y=hist_df_corr['收'], 
                 mode='lines',
-                name='指數軌跡',
+                name='上櫃指數',
                 line=dict(color='#bdc3c7', width=1.5, shape='spline', smoothing=1.3), # 平滑灰色線
                 hoverinfo='skip' 
             ))
+
+            # Layer 1.5: MA20 (20日均線) - 新增圖層
+            fig_spectrum.add_trace(go.Scatter(
+                x=hist_df_corr['日期'], 
+                y=hist_df_corr['MA20'], 
+                mode='lines',
+                name='20MA (月線)',
+                line=dict(color='#8e44ad', width=1.5, dash='dash'), # 紫色虛線
+                hoverinfo='skip' # 避免干擾主要資訊
+            ))
             
-            # Layer 2: 上層彩色點 (顯示風度) - 美化樣式
+            # Layer 2: 上層彩色點 (顯示風度)
             fig_spectrum.add_trace(go.Scatter(
                 x=hist_df_corr['日期'], 
                 y=hist_df_corr['收'], 
@@ -1236,8 +1258,8 @@ def show_dashboard():
                 name='風度狀態',
                 marker=dict(
                     color=point_colors,
-                    size=9, # 稍微放大
-                    line=dict(width=1, color='white'), # 加上白色邊框，產生寶石質感
+                    size=9, 
+                    line=dict(width=1, color='white'), 
                     symbol='circle'
                 ),
                 text=hist_df_corr['風度'],
@@ -1282,12 +1304,16 @@ def show_dashboard():
                     gridcolor='#d4d4d4', 
                     linecolor='#333333', linewidth=2
                 ),
-                margin=dict(l=20, r=20, t=60, b=20), # 上方邊距稍微加大以容納標題
-                showlegend=False 
+                margin=dict(l=20, r=20, t=60, b=20), 
+                showlegend=True, # 打開圖例以便辨識 MA20
+                legend=dict(
+                    orientation="h", yanchor="bottom", y=1.00, xanchor="right", x=1,
+                    font=dict(size=12, color='#000000')
+                )
             )
             
             st.plotly_chart(fig_spectrum, use_container_width=True)
-
+            
         else:
             st.warning("⚠️ 需上傳 kite_history.csv 才能顯示此分析。")
 
