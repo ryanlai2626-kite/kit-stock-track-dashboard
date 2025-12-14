@@ -976,12 +976,42 @@ def show_dashboard():
         st.info("👋 目前無資料。請至後台新增。")
         return
 
-    all_dates = df['date'].unique()
     st.sidebar.divider(); st.sidebar.header("📅 歷史回顧")
-    selected_date = st.sidebar.selectbox("選擇日期", options=all_dates, index=0)
-    day_df = df[df['date'] == selected_date]
-    if day_df.empty: st.error("日期讀取錯誤"); return
+    
+    # --- V158 Modified: 改用 date_input 月曆選擇器 ---
+    # 1. 轉換日期格式以取得範圍 (只用於選擇器邏輯，不影響主資料)
+    df['dt_temp'] = pd.to_datetime(df['date'], errors='coerce')
+    if not df.empty:
+        min_d = df['dt_temp'].min().date()
+        max_d = df['dt_temp'].max().date()
+        default_d = max_d
+    else:
+        min_d = datetime.now().date()
+        max_d = datetime.now().date()
+        default_d = datetime.now().date()
+
+    # 2. 顯示月曆元件
+    picked_dt = st.sidebar.date_input("選擇日期", value=default_d, min_value=min_d, max_value=max_d)
+    
+    # 3. 轉回字串格式 (YYYY-MM-DD) 與資料庫比對
+    selected_date = picked_dt.strftime("%Y-%m-%d")
+    
+    # --- 🛠️ 修正代碼開始：強制統一日期格式 ---
+    # 為了避免 CSV 裡是用斜線 (2025/12/12) 或有空白鍵導致比對失敗
+    # 我們先強制把 DataFrame 的日期欄位轉成 datetime 物件，再轉回統一的 YYYY-MM-DD 字串
+    df['compare_date'] = pd.to_datetime(df['date'], errors='coerce').dt.strftime('%Y-%m-%d')
+    
+    # 改用這個標準化後的 compare_date 來篩選
+    day_df = df[df['compare_date'] == selected_date]
+    # --- 🛠️ 修正代碼結束 ---
+
+    if day_df.empty: 
+        # 這裡加一行 debug 提示，讓你看到程式到底讀到了什麼日期 (可選)
+        # st.write(f"系統偵測到的資料庫日期格式範例: {df['date'].iloc[0] if not df.empty else '無'}")
+        st.error(f"❌ {selected_date} 無資料 (可能是假日或尚未歸檔)，請選擇其他日期。")
+        return
     day_data = day_df.iloc[0]
+    # -----------------------------------------------
 
     # --- 【V143】預先抓取成交值 (含 Manual Override) ---
     turnover_map = {}
@@ -1000,7 +1030,7 @@ def show_dashboard():
         
         turnover_map = prefetch_turnover_data(all_strategy_stocks, selected_date, manual_override_json=manual_json)
     
-    st.markdown(f"""<div class="title-box"><h1 style='margin:0; font-size: 2.8rem;'>📅 {selected_date} 市場戰情室</h1><p style='margin-top:10px; opacity:0.9;'>資料更新於: {day_data['last_updated']}</p></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="title-box"><h1 style='margin:0; font-size: 2.8rem;'>📅 {selected_date} 風箏市場戰情室</h1><p style='margin-top:10px; opacity:0.9;'>資料更新於: {day_data['last_updated']}</p></div>""", unsafe_allow_html=True)
 
     render_global_markets()
 
@@ -1582,10 +1612,10 @@ def show_dashboard():
 
             if '收' in hist_df.columns:
                 fig.add_trace(go.Scatter(x=hist_df['日期'], y=hist_df['收'], mode='lines', name='上櫃指數', line=dict(color='#2c3e50', width=2.5)))
-		
+        
             if 'MA20' in hist_df.columns:
                 fig.add_trace(go.Scatter(x=hist_df['日期'], y=hist_df['MA20'], mode='lines', name='20MA', line=dict(color='#8e44ad', width=2, dash='dash')))
-		            
+                    
             hover_text = []
             for idx, row in hist_df.iterrows():
                 raw_dir = row.get(target_col, row.get('風度', '')) if target_col else row.get('風度', '')
@@ -1680,8 +1710,8 @@ def show_dashboard():
         with col_l3:
             st.markdown("#### 🤝 好朋友推薦")
             st.markdown('<a href="https://www.google.com" target="_blank" class="link-btn">Google 搜尋</a>', unsafe_allow_html=True)
-            st.markdown('<a href="#" class="link-btn">待新增連結...</a>', unsafe_allow_html=True)
-            st.markdown('<a href="#" class="link-btn">待新增連結...</a>', unsafe_allow_html=True)
+            st.markdown('<a href="https://birdbrainfood-windofkite.streamlit.app" target="_blank" class="link-btn">鴿子-不魯放風箏的風度圖</a>', unsafe_allow_html=True)
+            st.markdown('<a href="https://service-82255878134.us-west1.run.app/"  target="_blank" class="link-btn">Ding-風箏策略儀表板</a>', unsafe_allow_html=True)
 
 # --- 6. 頁面視圖：管理後台 (後台) ---
 def show_admin_panel():
