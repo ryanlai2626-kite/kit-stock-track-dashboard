@@ -1594,13 +1594,13 @@ def show_dashboard():
             # 生成卡片 (加入槓桿提示)
             sub_text_suffix = f" (x{leverage})" if leverage != 1.0 else ""
             
-            c1 = make_card_html("bd-red", "🔴 強風亂流循環", f"{d_act} <span style='font-size:14px'>天</span>", f"佔比 {p_act:.0f}%", "#e74c3c", p_act)
+            c1 = make_card_html("bd-red", "🔴 強風/亂流循環", f"{d_act} <span style='font-size:14px'>天</span>", f"佔比 {p_act:.0f}%", "#e74c3c", p_act)
             c2 = make_card_html("bd-red", "🚀 積極平均績效", f"<span style='color:{c_act_val}'>{r_act:+.2f}%</span>", f"預估損益{sub_text_suffix}")
             
             c3 = make_card_html("bd-yellow", "🟡 循環交界", f"{d_tran} <span style='font-size:14px'>天</span>", f"佔比 {p_tran:.0f}%", "#f1c40f", p_tran)
             c4 = make_card_html("bd-yellow", "⚖️ 無方向平均績效", f"<span style='color:{c_tran_val}'>{r_tran:+.2f}%</span>", f"預估損益{sub_text_suffix}")
             
-            c5 = make_card_html("bd-green", "🟢 無風陣風循環", f"{d_pass} <span style='font-size:14px'>天</span>", f"佔比 {p_pass:.0f}%", "#2ecc71", p_pass)
+            c5 = make_card_html("bd-green", "🟢 無風/陣風循環", f"{d_pass} <span style='font-size:14px'>天</span>", f"佔比 {p_pass:.0f}%", "#2ecc71", p_pass)
             c6 = make_card_html("bd-green", "🛡️ 保守平均績效", f"<span style='color:{c_pass_val}'>{r_pass:+.2f}%</span>", f"預估損益{sub_text_suffix}")
 
             st.markdown(f'<div class="dashboard-grid-v183">{c1}{c2}{c3}{c4}{c5}{c6}</div>', unsafe_allow_html=True)
@@ -1648,7 +1648,7 @@ def show_dashboard():
             )
             
             st.plotly_chart(fig, use_container_width=True)
-            st.caption("🔴 積極(強風亂流循環) | 🟡 無方向(循環邊界) | 🟢 保守(無風陣風循環)")
+            st.caption("🔴 積極(強風-亂流循環) | 🟡 無方向(循環邊界) | 🟢 保守(無風-陣風循環)")
             
         else:
             st.warning("⚠️ 無資料，請確認 CSV 是否已上傳。")
