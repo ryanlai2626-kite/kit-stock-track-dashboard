@@ -1102,8 +1102,8 @@ def show_dashboard():
             margin: 0 !important;
         }
 
-        .m-label { font-size: 1.5rem; color: #666; font-weight: 600; margin-bottom: 5px; }
-        .m-value { font-size: 2.4rem; font-weight: 800; color: #2c3e50; margin: 0; line-height: 1.2; }
+        .m-label { font-size: 1.6rem; color: #666; font-weight: 600; margin-bottom: 5px; }
+        .m-value { font-size: 2.5rem; font-weight: 800; color: #2c3e50; margin: 0; line-height: 1.2; }
         .m-sub { font-size: 0.9rem; color: #888; font-weight: bold; margin-top: 5px; }
     </style>
     """, unsafe_allow_html=True)
@@ -1217,23 +1217,24 @@ def show_dashboard():
         ))
             
         fig_line.update_layout(
+            autosize=True, # 關鍵：讓 Plotly 自動調整大小
             template="plotly_white",
-            height=500, #稍微加高以容納風度標示
+            height=450, # 稍微調低高度，讓手機版更好看
             paper_bgcolor='white',
             plot_bgcolor='white',
-            font=dict(family="Arial, sans-serif", size=16, color='#000000'),
+            font=dict(family="Arial, sans-serif", size=14, color='#000000'), # 字體稍微調小
             xaxis=dict(
                 title="日期",
-                title_font=dict(size=20, weight='bold', color='#000000'),
-                tickfont=dict(size=16, color='#000000'),
+                title_font=dict(size=16, weight='bold', color='#000000'),
+                tickfont=dict(size=14, color='#000000'),
                 gridcolor='#d4d4d4',
                 showline=True,
                 linecolor='#000000'
             ),
             yaxis=dict(
                 title="數量",
-                title_font=dict(size=20, weight='bold', color='#000000'),
-                tickfont=dict(size=16, color='#000000'),
+                title_font=dict(size=16, weight='bold', color='#000000'),
+                tickfont=dict(size=14, color='#000000'),
                 gridcolor='#d4d4d4',
                 showline=True,
                 linecolor='#000000',
@@ -1242,9 +1243,10 @@ def show_dashboard():
             legend=dict(
                 orientation="h", 
                 yanchor="bottom", y=1.02, 
-                xanchor="right", x=1,
-                font=dict(size=16, color='#000000')
+                xanchor="left", x=0, # 讓圖例靠左對齊，避免在手機上超出邊界
+                font=dict(size=14, color='#000000')
             ),
+            margin=dict(l=10, r=10, t=50, b=10), # 縮減邊距，最大化手機顯示範圍
             hovermode="x unified"
         )
         st.plotly_chart(fig_line, use_container_width=True)
@@ -1380,7 +1382,8 @@ def show_dashboard():
                                             range=['#2ecc71', '#f1c40f', '#9b59b6', '#e74c3c'])), 
             tooltip=['date', 'wind']
         ).properties(
-            height=350 
+            height=450,
+            width='container' # 確保 Altair 也跟隨容器寬度
         ).configure(
             background='white'
         ).interactive()
@@ -1412,6 +1415,7 @@ def show_dashboard():
                 ))
 
         fig.update_layout(
+            autosize=True,
             template="plotly_white", # 強制使用白色主題，清除深色模式干擾
             barmode='group', # 關鍵：這會讓柱子並排顯示 (Side-by-Side)
             height=450,
@@ -1419,21 +1423,21 @@ def show_dashboard():
             paper_bgcolor='white',
             plot_bgcolor='white',
             # Fix 2: 全域字體強制黑色 (#000000)
-            font=dict(family="Arial, sans-serif", size=16, color='#000000'),
+            font=dict(family="Arial, sans-serif", size=14, color='#000000'),
             xaxis=dict(
                 title="月份",
                 # Fix 3: 強制使用類別型態，避免被解析為日期
                 type='category', 
-                title_font=dict(size=20, weight='bold', color='#000000'),
-                tickfont=dict(size=16, color='#000000'),
+                title_font=dict(size=16, weight='bold', color='#000000'),
+                tickfont=dict(size=14, color='#000000'),
                 gridcolor='#d4d4d4', # 稍微深一點的灰色網格
                 showline=True,       # 顯示軸線
                 linecolor='#000000'  # 軸線顏色
             ),
             yaxis=dict(
                 title="天數",
-                title_font=dict(size=20, weight='bold', color='#000000'),
-                tickfont=dict(size=16, color='#000000'),
+                title_font=dict(size=16, weight='bold', color='#000000'),
+                tickfont=dict(size=14, color='#000000'),
                 gridcolor='#d4d4d4',
                 showline=True,
                 linecolor='#000000'
@@ -1441,10 +1445,10 @@ def show_dashboard():
             legend=dict(
                 orientation="h", 
                 yanchor="bottom", y=1.02, 
-                xanchor="right", x=1,
-                font=dict(size=16, color='#000000')
+                xanchor="left", x=0,
+                font=dict(size=14, color='#000000')
             ),
-            margin=dict(l=20, r=20, t=50, b=20),
+            margin=dict(l=10, r=10, t=50, b=10), # 縮減邊距
             hovermode="x unified"
         )
         st.plotly_chart(fig, use_container_width=True)
@@ -1590,13 +1594,13 @@ def show_dashboard():
             # 生成卡片 (加入槓桿提示)
             sub_text_suffix = f" (x{leverage})" if leverage != 1.0 else ""
             
-            c1 = make_card_html("bd-red", "🔴 強風亂流循環", f"{d_act} <span style='font-size:12px'>天</span>", f"佔比 {p_act:.0f}%", "#e74c3c", p_act)
-            c2 = make_card_html("bd-red", "🚀 積極平均績效", f"<span style='color:{c_act_val}'>{r_act:+.2f}%</span>", f"預估報酬{sub_text_suffix}")
+            c1 = make_card_html("bd-red", "🔴 強風亂流循環", f"{d_act} <span style='font-size:14px'>天</span>", f"佔比 {p_act:.0f}%", "#e74c3c", p_act)
+            c2 = make_card_html("bd-red", "🚀 積極平均績效", f"<span style='color:{c_act_val}'>{r_act:+.2f}%</span>", f"預估損益{sub_text_suffix}")
             
-            c3 = make_card_html("bd-yellow", "🟡 循環交界", f"{d_tran} <span style='font-size:12px'>天</span>", f"佔比 {p_tran:.0f}%", "#f1c40f", p_tran)
-            c4 = make_card_html("bd-yellow", "⚖️ 無方向平均績效", f"<span style='color:{c_tran_val}'>{r_tran:+.2f}%</span>", f"預估波動{sub_text_suffix}")
+            c3 = make_card_html("bd-yellow", "🟡 循環交界", f"{d_tran} <span style='font-size:14px'>天</span>", f"佔比 {p_tran:.0f}%", "#f1c40f", p_tran)
+            c4 = make_card_html("bd-yellow", "⚖️ 無方向平均績效", f"<span style='color:{c_tran_val}'>{r_tran:+.2f}%</span>", f"預估損益{sub_text_suffix}")
             
-            c5 = make_card_html("bd-green", "🟢 無風陣風循環", f"{d_pass} <span style='font-size:12px'>天</span>", f"佔比 {p_pass:.0f}%", "#2ecc71", p_pass)
+            c5 = make_card_html("bd-green", "🟢 無風陣風循環", f"{d_pass} <span style='font-size:14px'>天</span>", f"佔比 {p_pass:.0f}%", "#2ecc71", p_pass)
             c6 = make_card_html("bd-green", "🛡️ 保守平均績效", f"<span style='color:{c_pass_val}'>{r_pass:+.2f}%</span>", f"預估損益{sub_text_suffix}")
 
             st.markdown(f'<div class="dashboard-grid-v183">{c1}{c2}{c3}{c4}{c5}{c6}</div>', unsafe_allow_html=True)
@@ -1620,7 +1624,7 @@ def show_dashboard():
             for idx, row in hist_df.iterrows():
                 raw_dir = row.get(target_col, row.get('風度', '')) if target_col else row.get('風度', '')
                 cycle_zh = {"active":"積極", "passive":"保守", "transition":"無方向"}.get(row['cycle'], "-")
-                hover_text.append(f"<b>{row['日期'].strftime('%Y-%m-%d')}</b><br>收: {row['收']:,.0f}<br>向: {raw_dir}<br>態: {cycle_zh}")
+                hover_text.append(f"<b>{row['日期'].strftime('%Y-%m-%d')}</b><br>收盤: {row['收']:,.0f}<br>方向: {raw_dir}<br>狀態: {cycle_zh}")
 
             fig.add_trace(go.Scatter(x=hist_df['日期'], y=hist_df['收'], mode='markers', name='資訊', marker=dict(size=0, opacity=0), hoverinfo='text', hovertext=hover_text))
 
@@ -1638,7 +1642,7 @@ def show_dashboard():
                     ]), bgcolor="#ecf0f1", activecolor="#3498db", font=dict(color="#2c3e50"), x=0, y=1.05)
                 ),
                 yaxis=dict(title="", showgrid=True, gridcolor='#f0f0f0', tickfont=dict(color='#333'), zeroline=False),
-                margin=dict(t=80, l=10, r=10, b=40),
+                margin=dict(t=80, l=15, r=15, b=40), # 縮減邊距
                 legend=dict(orientation="v", yanchor="top", y=1.22, xanchor="right", x=0.99, bgcolor='rgba(255,255,255,0.8)', bordercolor='#eee', borderwidth=1, font=dict(size=12, color='#000000')),
                 hovermode="x unified"
             )
@@ -1692,7 +1696,7 @@ def show_dashboard():
     st.markdown("---")
     
     # --- 【需求2】常用連結與好朋友區塊 ---
-    with st.expander("🔗 常用連結與好朋友 (Useful Links)", expanded=False):
+    with st.expander("🔗 常用連結與好朋友推薦 (Useful Links)", expanded=False):
         col_l1, col_l2, col_l3 = st.columns(3)
         
         with col_l1:
@@ -1912,4 +1916,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
