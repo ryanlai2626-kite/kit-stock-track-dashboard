@@ -979,7 +979,6 @@ def show_dashboard():
     st.sidebar.divider(); st.sidebar.header("📅 歷史回顧")
     
     # --- V158 Modified: 改用 date_input 月曆選擇器 ---
-    # 1. 轉換日期格式以取得範圍 (只用於選擇器邏輯，不影響主資料)
     df['dt_temp'] = pd.to_datetime(df['date'], errors='coerce')
     if not df.empty:
         min_d = df['dt_temp'].min().date()
@@ -990,30 +989,19 @@ def show_dashboard():
         max_d = datetime.now().date()
         default_d = datetime.now().date()
 
-    # 2. 顯示月曆元件
     picked_dt = st.sidebar.date_input("選擇日期", value=default_d, min_value=min_d, max_value=max_d)
-    
-    # 3. 轉回字串格式 (YYYY-MM-DD) 與資料庫比對
     selected_date = picked_dt.strftime("%Y-%m-%d")
     
-    # --- 🛠️ 修正代碼開始：強制統一日期格式 ---
-    # 為了避免 CSV 裡是用斜線 (2025/12/12) 或有空白鍵導致比對失敗
-    # 我們先強制把 DataFrame 的日期欄位轉成 datetime 物件，再轉回統一的 YYYY-MM-DD 字串
+    # --- 強制統一日期格式 ---
     df['compare_date'] = pd.to_datetime(df['date'], errors='coerce').dt.strftime('%Y-%m-%d')
-    
-    # 改用這個標準化後的 compare_date 來篩選
     day_df = df[df['compare_date'] == selected_date]
-    # --- 🛠️ 修正代碼結束 ---
 
     if day_df.empty: 
-        # 這裡加一行 debug 提示，讓你看到程式到底讀到了什麼日期 (可選)
-        # st.write(f"系統偵測到的資料庫日期格式範例: {df['date'].iloc[0] if not df.empty else '無'}")
         st.error(f"❌ {selected_date} 無資料 (可能是假日或尚未歸檔)，請選擇其他日期。")
         return
     day_data = day_df.iloc[0]
-    # -----------------------------------------------
 
-    # --- 【V143】預先抓取成交值 (含 Manual Override) ---
+    # --- 【V143】預先抓取成交值 ---
     turnover_map = {}
     with st.spinner("正在計算策略選股成交值..."):
         all_strategy_stocks = [
@@ -1023,11 +1011,8 @@ def show_dashboard():
             day_data.get('boss_bargain_list', ''),
             day_data.get('top_revenue_list', '')
         ]
-        # 讀取手動修正資料
         manual_json = day_data.get('manual_turnover', None)
-        # 如果是 NaN (pandas 空值)，轉為 None
         if pd.isna(manual_json): manual_json = None
-        
         turnover_map = prefetch_turnover_data(all_strategy_stocks, selected_date, manual_override_json=manual_json)
     
     st.markdown(f"""<div class="title-box"><h1 style='margin:0; font-size: 2.8rem;'>📅 {selected_date} 風箏市場戰情室</h1><p style='margin-top:10px; opacity:0.9;'>資料更新於: {day_data['last_updated']}</p></div>""", unsafe_allow_html=True)
@@ -1046,104 +1031,37 @@ def show_dashboard():
             
     st.divider()
 
-# --- V196: 每日風度與風箏數 (邊框顏色終極修正版) ---
+    # --- V196: 每日風度與風箏數 ---
     st.markdown("### 🌬️ 每日風度與風箏數")
 
-    # 1. 準備數據與邏輯
     wind_status = day_data['wind']
     wind_streak = calculate_wind_streak(df, selected_date)
     streak_text = f"已持續 {wind_streak} 天"
     
-    # 風向顏色判斷
-    wind_color = "#2ecc71" # 預設綠色 (無風)
+    wind_color = "#2ecc71" 
     if "強" in str(wind_status): wind_color = "#e74c3c"
     elif "亂" in str(wind_status): wind_color = "#9b59b6"
     elif "陣" in str(wind_status): wind_color = "#f1c40f"
 
-    # 2. 定義 CSS (將邊框設定拆開，避免衝突)
     st.markdown("""
     <style>
-        /* Grid 容器 */
-        div.metrics-grid {
-            display: grid !important;
-            grid-template-columns: repeat(2, 1fr) !important; /* 手機 2 欄 */
-            gap: 15px !important;
-            margin-bottom: 20px !important;
-            width: 100% !important;
-        }
-
-        /* 電腦版 4 欄 */
-        @media (min-width: 768px) {
-            div.metrics-grid {
-                grid-template-columns: repeat(4, 1fr) !important;
-            }
-        }
-
-        /* 卡片樣式 */
-        div.metrics-grid .metric-box {
-            background-color: #FFFFFF !important;
-            border-radius: 12px !important;
-            padding: 15px 10px !important;
-            text-align: center !important;
-            
-            /* 關鍵修正：不再使用 border 縮寫，而是分別設定左、右、下 */
-            /* 這樣就不會覆蓋掉 style 屬性裡的 border-top */
-            border-left: 1px solid #E0E0E0 !important;
-            border-right: 1px solid #E0E0E0 !important;
-            border-bottom: 1px solid #E0E0E0 !important;
-            /* border-top 留空，由 inline style 決定 */
-            
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05) !important;
-            display: flex !important;
-            flex-direction: column !important;
-            justify-content: center !important;
-            align-items: center !important;
-            min-height: 120px !important;
-            margin: 0 !important;
-        }
-
+        div.metrics-grid { display: grid !important; grid-template-columns: repeat(2, 1fr) !important; gap: 15px !important; margin-bottom: 20px !important; width: 100% !important; }
+        @media (min-width: 768px) { div.metrics-grid { grid-template-columns: repeat(4, 1fr) !important; } }
+        div.metrics-grid .metric-box { background-color: #FFFFFF !important; border-radius: 12px !important; padding: 15px 10px !important; text-align: center !important; border-left: 1px solid #E0E0E0 !important; border-right: 1px solid #E0E0E0 !important; border-bottom: 1px solid #E0E0E0 !important; box-shadow: 0 2px 5px rgba(0,0,0,0.05) !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; min-height: 120px !important; margin: 0 !important; }
         .m-label { font-size: 1.6rem; color: #666; font-weight: 600; margin-bottom: 5px; }
         .m-value { font-size: 2.5rem; font-weight: 800; color: #2c3e50; margin: 0; line-height: 1.2; }
         .m-sub { font-size: 0.9rem; color: #888; font-weight: bold; margin-top: 5px; }
     </style>
     """, unsafe_allow_html=True)
 
-    # 3. 組合 HTML (無縮排，加入 !important 確保顏色顯示)
-    
     html_metrics = '<div class="metrics-grid">'
-    
-    # 3.1 今日風向
-    # 注意：這裡加上 !important 確保它是最高優先級
-    html_metrics += f'<div class="metric-box" style="border-top: 5px solid {wind_color} !important;">'
-    html_metrics += f'<div class="m-label">🍃 今日風向</div>'
-    html_metrics += f'<div class="m-value">{wind_status}</div>'
-    html_metrics += f'<div class="m-sub">{streak_text}</div>'
+    html_metrics += f'<div class="metric-box" style="border-top: 5px solid {wind_color} !important;"><div class="m-label">🍃 今日風向</div><div class="m-value">{wind_status}</div><div class="m-sub">{streak_text}</div></div>'
+    html_metrics += f'<div class="metric-box" style="border-top: 5px solid #f39c12 !important;"><div class="m-label">🪁 打工型風箏</div><div class="m-value">{day_data["part_time_count"]}</div></div>'
+    html_metrics += f'<div class="metric-box" style="border-top: 5px solid #3498db !important;"><div class="m-label">💪 上班族強勢週</div><div class="m-value">{day_data["worker_strong_count"]}</div></div>'
+    html_metrics += f'<div class="metric-box" style="border-top: 5px solid #9b59b6 !important;"><div class="m-label">📈 上班族週趨勢</div><div class="m-value">{day_data["worker_trend_count"]}</div></div>'
     html_metrics += '</div>'
-
-    # 3.2 打工型風箏 (橘色)
-    html_metrics += '<div class="metric-box" style="border-top: 5px solid #f39c12 !important;">'
-    html_metrics += '<div class="m-label">🪁 打工型風箏</div>'
-    html_metrics += f'<div class="m-value">{day_data["part_time_count"]}</div>'
-    html_metrics += '</div>'
-
-    # 3.3 上班族強勢週 (藍色)
-    html_metrics += '<div class="metric-box" style="border-top: 5px solid #3498db !important;">'
-    html_metrics += '<div class="m-label">💪 上班族強勢週</div>'
-    html_metrics += f'<div class="m-value">{day_data["worker_strong_count"]}</div>'
-    html_metrics += '</div>'
-
-    # 3.4 上班族週趨勢 (紫色)
-    html_metrics += '<div class="metric-box" style="border-top: 5px solid #9b59b6 !important;">'
-    html_metrics += '<div class="m-label">📈 上班族週趨勢</div>'
-    html_metrics += f'<div class="m-value">{day_data["worker_trend_count"]}</div>'
-    html_metrics += '</div>'
-
-    html_metrics += '</div>'
-
-    # 4. 渲染
     st.markdown(html_metrics, unsafe_allow_html=True)
 
-    # 【V132】使用 render_stock_tags_v113 (名稱沒變，邏輯已優化)
     st.markdown('<div class="strategy-banner worker-banner"><p class="banner-text">👨‍💼 上班族策略 (Worker Strategy)</p></div>', unsafe_allow_html=True)
     w1, w2 = st.columns(2)
     with w1: st.markdown("### 🚀 強勢週 TOP 3"); st.markdown(render_stock_tags_v113(day_data['worker_strong_list'], turnover_map), unsafe_allow_html=True)
@@ -1162,325 +1080,62 @@ def show_dashboard():
     chart_df = df.copy(); chart_df['date_dt'] = pd.to_datetime(chart_df['date']); chart_df = chart_df.sort_values('date_dt', ascending=True)
     chart_df['Month'] = chart_df['date_dt'].dt.strftime('%Y-%m')
 
-    tab1, tab2, tab3, tab4 = st.tabs(["📈 每日風箏數量", "🌬️ 每日風度分佈", "📅 每月風度統計", "🔄 2025 年風度循環回顧"])
+    # 修改這裡：增加 Tab 5
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 每日風箏數量", "🌬️ 每日風度分佈", "🔄 2025 年風度循環回顧", "🌪️ 風度 vs 指數相關性", "📅 每月風度統計",])
     axis_config = alt.Axis(labelFontSize=16, titleFontSize=20, labelColor='#333333', titleColor='#333333', labelFontWeight='bold', grid=True, gridColor='#E0E0E0')
     legend_config = alt.Legend(orient='top', labelFontSize=16, titleFontSize=20, labelColor='#333333', titleColor='#333333')
 
+    # Tab 1: 每日風箏數量 (保持原樣)
     with tab1:
-        # 【需求1 & 新需求】圓滑折線圖 + 風度標示整合
-        # 使用 Plotly 以確保美觀與可讀性 (白底黑字)
         fig_line = go.Figure()
-        
-        # 1. 繪製三條數據線
-        lines_config = [
-            {"col": "part_time_count", "name": "打工型風箏", "color": "#f39c12"},
-            {"col": "worker_strong_count", "name": "上班族強勢週", "color": "#3498db"},
-            {"col": "worker_trend_count", "name": "上班族週趨勢", "color": "#9b59b6"}
-        ]
-        
+        lines_config = [{"col": "part_time_count", "name": "打工型風箏", "color": "#f39c12"}, {"col": "worker_strong_count", "name": "上班族強勢週", "color": "#3498db"}, {"col": "worker_trend_count", "name": "上班族週趨勢", "color": "#9b59b6"}]
         for cfg in lines_config:
-            fig_line.add_trace(go.Scatter(
-                x=chart_df['date'], 
-                y=chart_df[cfg['col']],
-                name=cfg['name'],
-                mode='lines+markers', # 顯示線條與點
-                line=dict(shape='spline', smoothing=1.3, width=3, color=cfg['color']), # 設定為圓滑曲線 (Spline)
-                marker=dict(size=7, symbol='circle')
-            ))
-            
-        # 2. 【新功能】加入「風向球」標示層
-        # 計算 Y 軸最大值，決定風向球的高度位置
-        all_counts = []
-        for c in ['part_time_count', 'worker_strong_count', 'worker_trend_count']:
-            all_counts.extend(chart_df[c].tolist())
-        max_y = max(all_counts) if all_counts else 10
-        indicator_y = max_y * 1.10 # 設定在最大值上方 15% 的位置
-        
-        # 風度顏色對應
+            fig_line.add_trace(go.Scatter(x=chart_df['date'], y=chart_df[cfg['col']], name=cfg['name'], mode='lines+markers', line=dict(shape='spline', smoothing=1.3, width=3, color=cfg['color']), marker=dict(size=7, symbol='circle')))
+        all_counts = []; 
+        for c in ['part_time_count', 'worker_strong_count', 'worker_trend_count']: all_counts.extend(chart_df[c].tolist())
+        max_y = max(all_counts) if all_counts else 10; indicator_y = max_y * 1.10
         wind_color_map = {'強風': '#e74c3c', '亂流': '#9b59b6', '陣風': '#f1c40f', '無風': '#2ecc71'}
-        
-        # 準備風度數據
         wind_colors = [wind_color_map.get(str(w).strip(), '#999') for w in chart_df['wind']]
-        wind_texts = [str(w).strip()[0] if str(w).strip() else "?" for w in chart_df['wind']] # 取首字 (強, 亂...)
-        
-        fig_line.add_trace(go.Scatter(
-            x=chart_df['date'],
-            y=[indicator_y] * len(chart_df), # 懸浮在上方
-            mode='markers+text',
-            name='當日風度',
-            text=wind_texts,
-            textposition="top center",
-            textfont=dict(size=13, color='#333', family='Arial Black'),
-            marker=dict(size=15, color=wind_colors, symbol='circle', line=dict(width=1, color='#333')),
-            hoverinfo='text',
-            hovertext=[f"日期: {d}<br>風度: {w}" for d, w in zip(chart_df['date'], chart_df['wind'])]
-        ))
-            
-        fig_line.update_layout(
-            autosize=True, # 關鍵：讓 Plotly 自動調整大小
-            template="plotly_white",
-            height=450, # 稍微調低高度，讓手機版更好看
-            paper_bgcolor='white',
-            plot_bgcolor='white',
-            font=dict(family="Arial, sans-serif", size=14, color='#000000'), # 字體稍微調小
-            xaxis=dict(
-                title="日期",
-                title_font=dict(size=16, weight='bold', color='#000000'),
-                tickfont=dict(size=14, color='#000000'),
-                gridcolor='#d4d4d4',
-                showline=True,
-                linecolor='#000000'
-            ),
-            yaxis=dict(
-                title="數量",
-                title_font=dict(size=16, weight='bold', color='#000000'),
-                tickfont=dict(size=14, color='#000000'),
-                gridcolor='#d4d4d4',
-                showline=True,
-                linecolor='#000000',
-                range=[0, max_y * 1.25] # 預留頂部空間給風向球
-            ),
-            legend=dict(
-                orientation="h", 
-                yanchor="bottom", y=1.02, 
-                xanchor="left", x=0, # 讓圖例靠左對齊，避免在手機上超出邊界
-                font=dict(size=14, color='#000000')
-            ),
-            margin=dict(l=10, r=10, t=50, b=10), # 縮減邊距，最大化手機顯示範圍
-            hovermode="x unified"
-        )
+        wind_texts = [str(w).strip()[0] if str(w).strip() else "?" for w in chart_df['wind']]
+        fig_line.add_trace(go.Scatter(x=chart_df['date'], y=[indicator_y]*len(chart_df), mode='markers+text', name='當日風度', text=wind_texts, textposition="top center", textfont=dict(size=13, color='#333', family='Arial Black'), marker=dict(size=15, color=wind_colors, symbol='circle', line=dict(width=1, color='#333')), hoverinfo='text', hovertext=[f"日期: {d}<br>風度: {w}" for d, w in zip(chart_df['date'], chart_df['wind'])]))
+        fig_line.update_layout(autosize=True, template="plotly_white", height=450, paper_bgcolor='white', plot_bgcolor='white', font=dict(family="Arial, sans-serif", size=14, color='#000000'), xaxis=dict(title="日期", title_font=dict(size=16, weight='bold', color='#000000'), tickfont=dict(size=14, color='#000000'), gridcolor='#d4d4d4', showline=True, linecolor='#000000'), yaxis=dict(title="數量", title_font=dict(size=16, weight='bold', color='#000000'), tickfont=dict(size=14, color='#000000'), gridcolor='#d4d4d4', showline=True, linecolor='#000000', range=[0, max_y * 1.25]), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0, font=dict(size=14, color='#000000')), margin=dict(l=10, r=10, t=50, b=10), hovermode="x unified")
         st.plotly_chart(fig_line, use_container_width=True)
     
+    # Tab 2: 市場觀察趨勢定義 (保持原樣)
     with tab2:
-        # 【V199】市場觀察趨勢定義 (護眼柔和漸層版)
         st.markdown("#### 🌬️ 市場觀察趨勢定義")
-        
-        # 1. 定義 CSS (調整背景漸層為護眼色系)
-        st.markdown("""
-        <style>
-            /* 容器：Flexbox 設定 */
-            div.trend-scroll-box {
-                display: flex !important;
-                flex-direction: row !important;
-                flex-wrap: nowrap !important;
-                overflow-x: auto !important;
-                gap: 10px !important;
-                padding: 5px 2px 10px 2px !important;
-                width: 100% !important;
-                -webkit-overflow-scrolling: touch;
-                align-items: stretch !important;
-            }
-
-            /* 卡片基礎樣式 */
-            div.trend-scroll-box .t-card {
-                flex: 0 0 auto !important;
-                width: 160px !important;
-                min-width: 160px !important;
-                border-radius: 10px !important;
-                padding: 10px 8px !important;
-                color: #FFFFFF !important;      /* 維持白色字體 */
-                box-shadow: 0 3px 6px rgba(0,0,0,0.1) !important; /* 陰影也稍微調淡 */
-                display: flex !important;
-                flex-direction: column !important;
-                align-items: center !important;
-                justify-content: center !important;
-                text-align: center !important;
-                margin: 0 !important;
-                border: 1px solid rgba(255,255,255,0.2) !important; /* 邊框更輕柔 */
-            }
-
-            /* 電腦版覆寫 */
-            @media (min-width: 768px) {
-                div.trend-scroll-box {
-                    overflow-x: hidden !important;
-                    justify-content: space-between !important;
-                }
-                div.trend-scroll-box .t-card {
-                    flex: 1 1 0px !important;
-                    width: auto !important;
-                    min-width: 0 !important;
-                }
-            }
-
-            /* 內容排版 */
-            .t-icon { 
-                font-size: 2.0rem !important; 
-                margin-bottom: 5px !important; 
-                text-shadow: 0 1px 2px rgba(0,0,0,0.1); 
-            }
-            .t-title { 
-                font-size: 1.3rem !important; 
-                font-weight: 800 !important; 
-                margin-bottom: 5px !important; 
-                color: #FFFFFF !important;
-                text-shadow: 0 1px 2px rgba(0,0,0,0.1); 
-                line-height: 1.2 !important; 
-            }
-            .t-desc { 
-                font-size: 1.0rem !important; 
-                font-weight: 500 !important; 
-                line-height: 1.4 !important; 
-                color: rgba(255,255,255,0.95) !important; 
-            }
-            
-            /* 【關鍵修改】背景漸層定義 (護眼柔和版) */
-            /* 紅色系：改為柔和珊瑚紅 -> 淺磚紅 */
-            .bg-strong-v199 { 
-                background: linear-gradient(135deg, #FF8A80 0%, #E57373 100%) !important; 
-            }
-            /* 紫色系：改為柔和薰衣草 -> 霧感紫 */
-            .bg-chaos-v199 { 
-                background: linear-gradient(135deg, #BA68C8 0%, #9575CD 100%) !important; 
-            }
-            /* 綠色系：改為清新薄荷 -> 鼠尾草綠 */
-            .bg-weak-v199 { 
-                background: linear-gradient(135deg, #81C784 0%, #4DB6AC 100%) !important; 
-            }
-
-            /* 隱藏捲軸 */
-            div.trend-scroll-box::-webkit-scrollbar { height: 4px; }
-            div.trend-scroll-box::-webkit-scrollbar-thumb { background-color: #ccc; border-radius: 4px; }
-        </style>
-        """, unsafe_allow_html=True)
-
-        # 2. 組合 HTML
-        t_html = '<div class="trend-scroll-box">'
-        
-        # 卡片 1: 強風/亂流
-        t_html += '<div class="t-card bg-strong-v199">'
-        t_html += '<div class="t-icon">🔥</div>'
-        t_html += '<div class="t-title">強風/亂流循環</div>'
-        t_html += '<div class="t-desc">易漲行情<br>股價走勢有延續性<br>(打工/上班型)</div>'
-        t_html += '</div>'
-
-        # 卡片 2: 循環交界
-        t_html += '<div class="t-card bg-chaos-v199">'
-        t_html += '<div class="t-icon">🌪️</div>'
-        t_html += '<div class="t-title">循環的交界</div>'
-        t_html += '<div class="t-desc">待觀察<br>行情無明確方向<br>(等方向出來再積極)</div>'
-        t_html += '</div>'
-
-        # 卡片 3: 陣風/無風
-        t_html += '<div class="t-card bg-weak-v199">'
-        t_html += '<div class="t-icon">🍃</div>'
-        t_html += '<div class="t-title">陣風/無風循環</div>'
-        t_html += '<div class="t-desc">易跌行情<br>股價走勢難延續<br>(老闆/成長型)</div>'
-        t_html += '</div>'
-
-        t_html += '</div>'
-
-        # 渲染 HTML
+        st.markdown("""<style>div.trend-scroll-box { display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; overflow-x: auto !important; gap: 10px !important; padding: 5px 2px 10px 2px !important; width: 100% !important; -webkit-overflow-scrolling: touch; align-items: stretch !important; } div.trend-scroll-box .t-card { flex: 0 0 auto !important; width: 160px !important; min-width: 160px !important; border-radius: 10px !important; padding: 10px 8px !important; color: #FFFFFF !important; box-shadow: 0 3px 6px rgba(0,0,0,0.1) !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; text-align: center !important; margin: 0 !important; border: 1px solid rgba(255,255,255,0.2) !important; } @media (min-width: 768px) { div.trend-scroll-box { overflow-x: hidden !important; justify-content: space-between !important; } div.trend-scroll-box .t-card { flex: 1 1 0px !important; width: auto !important; min-width: 0 !important; } } .t-icon { font-size: 2.0rem !important; margin-bottom: 5px !important; text-shadow: 0 1px 2px rgba(0,0,0,0.1); } .t-title { font-size: 1.3rem !important; font-weight: 800 !important; margin-bottom: 5px !important; color: #FFFFFF !important; text-shadow: 0 1px 2px rgba(0,0,0,0.1); line-height: 1.2 !important; } .t-desc { font-size: 1.0rem !important; font-weight: 500 !important; line-height: 1.4 !important; color: rgba(255,255,255,0.95) !important; } .bg-strong-v199 { background: linear-gradient(135deg, #FF8A80 0%, #E57373 100%) !important; } .bg-chaos-v199 { background: linear-gradient(135deg, #BA68C8 0%, #9575CD 100%) !important; } .bg-weak-v199 { background: linear-gradient(135deg, #81C784 0%, #4DB6AC 100%) !important; } div.trend-scroll-box::-webkit-scrollbar { height: 4px; } div.trend-scroll-box::-webkit-scrollbar-thumb { background-color: #ccc; border-radius: 4px; }</style>""", unsafe_allow_html=True)
+        t_html = '<div class="trend-scroll-box"><div class="t-card bg-strong-v199"><div class="t-icon">🔥</div><div class="t-title">強風/亂流循環</div><div class="t-desc">易漲行情<br>股價走勢有延續性<br>(打工/上班型)</div></div><div class="t-card bg-chaos-v199"><div class="t-icon">🌪️</div><div class="t-title">循環的交界</div><div class="t-desc">待觀察<br>行情無明確方向<br>(等方向出來再積極)</div></div><div class="t-card bg-weak-v199"><div class="t-icon">🍃</div><div class="t-title">陣風/無風循環</div><div class="t-desc">易跌行情<br>股價走勢難延續<br>(老闆/成長型)</div></div></div>'
         st.markdown(t_html, unsafe_allow_html=True)
-        
-        # 3. 下方圖表 (保留)
         wind_order = ['強風', '亂流', '陣風', '無風'] 
-        wind_chart = alt.Chart(chart_df).mark_circle(size=350, opacity=0.9).encode(
-            x=alt.X('date:O', title='日期', axis=axis_config), 
-            y=alt.Y('wind:N', title='風度', sort=wind_order, axis=axis_config), 
-            color=alt.Color('wind:N', title='狀態', legend=legend_config, 
-                            scale=alt.Scale(domain=['無風', '陣風', '亂流', '強風'], 
-                                            range=['#2ecc71', '#f1c40f', '#9b59b6', '#e74c3c'])), 
-            tooltip=['date', 'wind']
-        ).properties(
-            height=450,
-            width='container' # 確保 Altair 也跟隨容器寬度
-        ).configure(
-            background='white'
-        ).interactive()
-        
+        wind_chart = alt.Chart(chart_df).mark_circle(size=350, opacity=0.9).encode(x=alt.X('date:O', title='日期', axis=axis_config), y=alt.Y('wind:N', title='風度', sort=wind_order, axis=axis_config), color=alt.Color('wind:N', title='狀態', legend=legend_config, scale=alt.Scale(domain=['無風', '陣風', '亂流', '強風'], range=['#2ecc71', '#f1c40f', '#9b59b6', '#e74c3c'])), tooltip=['date', 'wind']).properties(height=350, width='container').configure(background='white').interactive()
         st.altair_chart(wind_chart, use_container_width=True)
         
-    with tab3:
-        # 【需求3】改用 Plotly 解決渲染問題並實現分組柱狀圖 (V155: 強制黑色字體 + Plotly White Template)
+    # Tab 5: 每月風度統計 (保持原樣)
+    with tab5:
         monthly_wind = chart_df.groupby(['Month', 'wind']).size().reset_index(name='count')
-        
-        # 顏色對應
         color_map = {'無風': '#2ecc71', '陣風': '#f1c40f', '亂流': '#9b59b6', '強風': '#e74c3c'}
         wind_types = ['無風', '陣風', '亂流', '強風']
-        
         fig = go.Figure()
-        
         for w_type in wind_types:
-            # 篩選數據
             sub_df = monthly_wind[monthly_wind['wind'] == w_type]
-            if not sub_df.empty:
-                fig.add_trace(go.Bar(
-                    x=sub_df['Month'],
-                    y=sub_df['count'],
-                    name=w_type,
-                    marker_color=color_map.get(w_type, '#333'),
-                    marker_line_width=1.5, # 增加邊框讓它看起來更立體
-                    marker_line_color='rgba(0,0,0,0.2)',
-                    opacity=0.9
-                ))
-
-        fig.update_layout(
-            autosize=True,
-            template="plotly_white", # 強制使用白色主題，清除深色模式干擾
-            barmode='group', # 關鍵：這會讓柱子並排顯示 (Side-by-Side)
-            height=450,
-            # Fix 1: 背景白化
-            paper_bgcolor='white',
-            plot_bgcolor='white',
-            # Fix 2: 全域字體強制黑色 (#000000)
-            font=dict(family="Arial, sans-serif", size=14, color='#000000'),
-            xaxis=dict(
-                title="月份",
-                # Fix 3: 強制使用類別型態，避免被解析為日期
-                type='category', 
-                title_font=dict(size=16, weight='bold', color='#000000'),
-                tickfont=dict(size=14, color='#000000'),
-                gridcolor='#d4d4d4', # 稍微深一點的灰色網格
-                showline=True,       # 顯示軸線
-                linecolor='#000000'  # 軸線顏色
-            ),
-            yaxis=dict(
-                title="天數",
-                title_font=dict(size=16, weight='bold', color='#000000'),
-                tickfont=dict(size=14, color='#000000'),
-                gridcolor='#d4d4d4',
-                showline=True,
-                linecolor='#000000'
-            ),
-            legend=dict(
-                orientation="h", 
-                yanchor="bottom", y=1.02, 
-                xanchor="left", x=0,
-                font=dict(size=14, color='#000000')
-            ),
-            margin=dict(l=10, r=10, t=50, b=10), # 縮減邊距
-            hovermode="x unified"
-        )
+            if not sub_df.empty: fig.add_trace(go.Bar(x=sub_df['Month'], y=sub_df['count'], name=w_type, marker_color=color_map.get(w_type, '#333'), marker_line_width=1.5, marker_line_color='rgba(0,0,0,0.2)', opacity=0.9))
+        fig.update_layout(autosize=True, template="plotly_white", barmode='group', height=450, paper_bgcolor='white', plot_bgcolor='white', font=dict(family="Arial, sans-serif", size=14, color='#000000'), xaxis=dict(title="月份", type='category', title_font=dict(size=16, weight='bold', color='#000000'), tickfont=dict(size=14, color='#000000'), gridcolor='#d4d4d4', showline=True, linecolor='#000000'), yaxis=dict(title="天數", title_font=dict(size=16, weight='bold', color='#000000'), tickfont=dict(size=14, color='#000000'), gridcolor='#d4d4d4', showline=True, linecolor='#000000'), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0, font=dict(size=14, color='#000000')), margin=dict(l=10, r=10, t=50, b=10), hovermode="x unified")
         st.plotly_chart(fig, use_container_width=True)
 
-# --- 【V183 績效權重版】Tab 4: 年度循環戰情室 ---
-    with tab4:
-        # 標題與控制項佈局
+    # Tab 3: 年度循環戰情室 (保持原樣)
+    with tab3:
         c_title, c_ctrl = st.columns([3, 1])
-        with c_title:
-            st.markdown("#### 🔄 2025 年度風度循環分析 (Wind Cycle Analysis)")
-            st.caption("分析大盤在不同循環下的表現，並透過右側設定換算您的操作績效。")
-        with c_ctrl:
-            # 【V183 新增】槓桿倍數控制器
-            leverage = st.number_input("⚖️ 操作槓桿倍數", min_value=0.1, max_value=10.0, value=1.0, step=0.1, help="例如：操作正2 ETF 請設 2.0；操作個股可設 1.0 或其 Beta 值。")
-
-        hist_df = load_history_data()
+        with c_title: st.markdown("#### 🔄 2025 年度風度循環分析 (Wind Cycle Analysis)"); st.caption("分析大盤在不同循環下的表現，並透過右側設定換算您的操作績效。")
+        with c_ctrl: leverage = st.number_input("⚖️ 操作槓桿倍數", min_value=0.1, max_value=10.0, value=1.0, step=0.1, help="例如：操作正2 ETF 請設 2.0；操作個股可設 1.0 或其 Beta 值。")
         
+        hist_df = load_history_data()
         if not hist_df.empty:
-            # --- 1. 資料前處理 ---
             hist_df['日期'] = pd.to_datetime(hist_df['日期'], format='mixed', errors='coerce')
             hist_df = hist_df.sort_values('日期', ascending=True).reset_index(drop=True)
-            
-            # 處理 20MA
             col_20ma = next((c for c in hist_df.columns if '20ma' in c.lower().replace(' ', '')), None)
-            if col_20ma:
-                hist_df['MA20'] = pd.to_numeric(hist_df[col_20ma], errors='coerce')
-            else:
-                hist_df['MA20'] = hist_df['收'].rolling(window=20, min_periods=1).mean()
-            
-            # --- 2. 循環判斷邏輯 ---
+            hist_df['MA20'] = pd.to_numeric(hist_df[col_20ma], errors='coerce') if col_20ma else hist_df['收'].rolling(window=20, min_periods=1).mean()
             target_col = next((c for c in hist_df.columns if '行情' in c or '方向' in c), None)
-            
             if target_col:
                 hist_df[target_col] = hist_df[target_col].astype(str).str.strip()
                 def get_cycle_v179(val):
@@ -1497,161 +1152,144 @@ def show_dashboard():
                     return 'transition'
                 hist_df['cycle'] = hist_df['風度'].apply(get_cycle_backup)
 
-            # --- 3. 計算區塊 ---
-            zones = []
-            cycle_stats = {
-                'active': {'count': 0, 'days': 0, 'return': []}, 
-                'passive': {'count': 0, 'days': 0, 'return': []},
-                'transition': {'count': 0, 'days': 0, 'return': []}
-            }
-            
+            zones = []; cycle_stats = {'active': {'count': 0, 'days': 0, 'return': []}, 'passive': {'count': 0, 'days': 0, 'return': []}, 'transition': {'count': 0, 'days': 0, 'return': []}}
             if not hist_df.empty:
-                curr_start = hist_df.iloc[0]['日期']
-                curr_price = hist_df.iloc[0]['收']
-                curr_cycle = hist_df.iloc[0]['cycle']
-                
+                curr_start = hist_df.iloc[0]['日期']; curr_price = hist_df.iloc[0]['收']; curr_cycle = hist_df.iloc[0]['cycle']
                 for i in range(1, len(hist_df)):
                     row = hist_df.iloc[i]
                     if row['cycle'] != curr_cycle:
-                        end_date = row['日期']
-                        end_price = hist_df.iloc[i-1]['收']
-                        ret = ((end_price - curr_price) / curr_price * 100) if curr_price > 0 else 0
-                        days = (end_date - curr_start).days
+                        end_date = row['日期']; end_price = hist_df.iloc[i-1]['收']; ret = ((end_price - curr_price) / curr_price * 100) if curr_price > 0 else 0; days = (end_date - curr_start).days
                         zones.append({'start': curr_start, 'end': end_date, 'type': curr_cycle, 'return': ret})
-                        if curr_cycle in cycle_stats:
-                            cycle_stats[curr_cycle]['count'] += 1
-                            cycle_stats[curr_cycle]['days'] += days
-                            cycle_stats[curr_cycle]['return'].append(ret)
-                        curr_start = row['日期']
-                        curr_price = row['收']
-                        curr_cycle = row['cycle']
-                
-                last_end = hist_df.iloc[-1]['日期'] + pd.Timedelta(days=1)
-                last_price = hist_df.iloc[-1]['收']
-                last_ret = ((last_price - curr_price) / curr_price * 100) if curr_price > 0 else 0
-                last_days = (last_end - curr_start).days
+                        if curr_cycle in cycle_stats: cycle_stats[curr_cycle]['count'] += 1; cycle_stats[curr_cycle]['days'] += days; cycle_stats[curr_cycle]['return'].append(ret)
+                        curr_start = row['日期']; curr_price = row['收']; curr_cycle = row['cycle']
+                last_end = hist_df.iloc[-1]['日期'] + pd.Timedelta(days=1); last_price = hist_df.iloc[-1]['收']; last_ret = ((last_price - curr_price) / curr_price * 100) if curr_price > 0 else 0; last_days = (last_end - curr_start).days
                 zones.append({'start': curr_start, 'end': last_end, 'type': curr_cycle, 'return': last_ret})
-                if curr_cycle in cycle_stats:
-                    cycle_stats[curr_cycle]['count'] += 1
-                    cycle_stats[curr_cycle]['days'] += last_days
-                    cycle_stats[curr_cycle]['return'].append(last_ret)
+                if curr_cycle in cycle_stats: cycle_stats[curr_cycle]['count'] += 1; cycle_stats[curr_cycle]['days'] += last_days; cycle_stats[curr_cycle]['return'].append(last_ret)
 
-            # --- 4. 儀表板渲染 (應用槓桿倍數) ---
-            # 【V183 關鍵】將計算出的平均績效乘上 leverage 倍數
-            def avg_leveraged(l): 
-                base_avg = sum(l)/len(l) if l else 0
-                return base_avg * leverage
-
+            def avg_leveraged(l): base_avg = sum(l)/len(l) if l else 0; return base_avg * leverage
             total_days = sum(stats['days'] for stats in cycle_stats.values()) or 1
-            
-            # 數據變數
             d_act = cycle_stats['active']['days']; p_act = d_act/total_days*100; r_act = avg_leveraged(cycle_stats['active']['return'])
             d_pass = cycle_stats['passive']['days']; p_pass = d_pass/total_days*100; r_pass = avg_leveraged(cycle_stats['passive']['return'])
             d_tran = cycle_stats['transition']['days']; p_tran = d_tran/total_days*100; r_tran = avg_leveraged(cycle_stats['transition']['return'])
-            
-            c_act_val = '#e74c3c' if r_act > 0 else '#27ae60'
-            c_pass_val = '#e74c3c' if r_pass > 0 else '#27ae60'
-            c_tran_val = '#e74c3c' if r_tran > 0 else ('#27ae60' if r_tran < 0 else '#95a5a6')
-
-            # 注入 CSS (手機友善)
-            st.markdown("""
-            <style>
-                .dashboard-grid-v183 {
-                    display: grid;
-                    grid-template-columns: repeat(6, 1fr);
-                    gap: 10px;
-                    margin-bottom: 25px;
-                }
-                @media (max-width: 768px) {
-                    .dashboard-grid-v183 {
-                        grid-template-columns: 1fr 1fr;
-                    }
-                }
-                .m-card {
-                    background: #fff; border-radius: 12px; padding: 15px 5px;
-                    text-align: center; border: 1px solid #f0f0f0;
-                    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-                    display: flex; flex-direction: column; justify-content: center; height: 100%;
-                }
-                .bd-red { border-top: 4px solid #e74c3c; }
-                .bd-yellow { border-top: 4px solid #f1c40f; }
-                .bd-green { border-top: 4px solid #2ecc71; }
-                
-                .mc-lbl { font-size: 18px; font-weight: bold; color: #555; margin-bottom: 5px; }
-                .mc-val { font-size: 22px; font-weight: 800; color: #2c3e50; margin: 2px 0; font-family: Arial, sans-serif; }
-                .mc-sub { font-size: 12px; color: #888; margin-top: 2px; }
-                .p-bg { width: 100%; height: 4px; background: #f1f2f6; border-radius: 2px; margin-top: 8px; overflow: hidden; margin-left: auto; margin-right: auto; }
-                .p-fill { height: 100%; border-radius: 2px; }
-            </style>
-            """, unsafe_allow_html=True)
-
+            c_act_val = '#e74c3c' if r_act > 0 else '#27ae60'; c_pass_val = '#e74c3c' if r_pass > 0 else '#27ae60'; c_tran_val = '#e74c3c' if r_tran > 0 else ('#27ae60' if r_tran < 0 else '#95a5a6')
+            st.markdown("""<style>.dashboard-grid-v183 { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 25px; } @media (max-width: 768px) { .dashboard-grid-v183 { grid-template-columns: 1fr 1fr; } } .m-card { background: #fff; border-radius: 12px; padding: 15px 5px; text-align: center; border: 1px solid #f0f0f0; box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; flex-direction: column; justify-content: center; height: 100%; } .bd-red { border-top: 4px solid #e74c3c; } .bd-yellow { border-top: 4px solid #f1c40f; } .bd-green { border-top: 4px solid #2ecc71; } .mc-lbl { font-size: 18px; font-weight: bold; color: #555; margin-bottom: 5px; } .mc-val { font-size: 22px; font-weight: 800; color: #2c3e50; margin: 2px 0; font-family: Arial, sans-serif; } .mc-sub { font-size: 12px; color: #888; margin-top: 2px; } .p-bg { width: 100%; height: 4px; background: #f1f2f6; border-radius: 2px; margin-top: 8px; overflow: hidden; margin-left: auto; margin-right: auto; } .p-fill { height: 100%; border-radius: 2px; }</style>""", unsafe_allow_html=True)
             def make_card_html(border_class, title, value_html, sub_text, bar_color=None, bar_pct=0):
-                bar_html = ""
-                if bar_color:
-                    bar_html = f'<div class="p-bg"><div class="p-fill" style="width:{bar_pct}%; background:{bar_color};"></div></div>'
+                bar_html = f'<div class="p-bg"><div class="p-fill" style="width:{bar_pct}%; background:{bar_color};"></div></div>' if bar_color else ""
                 return f"""<div class="m-card {border_class}"><div class="mc-lbl">{title}</div><div class="mc-val">{value_html}</div><div class="mc-sub">{sub_text}</div>{bar_html}</div>"""
-
-            # 生成卡片 (加入槓桿提示)
             sub_text_suffix = f" (x{leverage})" if leverage != 1.0 else ""
-            
-            c1 = make_card_html("bd-red", "🔴 強風/亂流循環", f"{d_act} <span style='font-size:14px'>天</span>", f"佔比 {p_act:.0f}%", "#e74c3c", p_act)
-            c2 = make_card_html("bd-red", "🚀 積極平均績效", f"<span style='color:{c_act_val}'>{r_act:+.2f}%</span>", f"預估損益{sub_text_suffix}")
-            
-            c3 = make_card_html("bd-yellow", "🟡 循環交界", f"{d_tran} <span style='font-size:14px'>天</span>", f"佔比 {p_tran:.0f}%", "#f1c40f", p_tran)
-            c4 = make_card_html("bd-yellow", "⚖️ 無方向平均績效", f"<span style='color:{c_tran_val}'>{r_tran:+.2f}%</span>", f"預估損益{sub_text_suffix}")
-            
-            c5 = make_card_html("bd-green", "🟢 無風/陣風循環", f"{d_pass} <span style='font-size:14px'>天</span>", f"佔比 {p_pass:.0f}%", "#2ecc71", p_pass)
-            c6 = make_card_html("bd-green", "🛡️ 保守平均績效", f"<span style='color:{c_pass_val}'>{r_pass:+.2f}%</span>", f"預估損益{sub_text_suffix}")
-
+            c1 = make_card_html("bd-red", "🔴 強風/亂流", f"{d_act} <span style='font-size:12px'>天</span>", f"佔比 {p_act:.0f}%", "#e74c3c", p_act)
+            c2 = make_card_html("bd-red", "🚀 積極績效", f"<span style='color:{c_act_val}'>{r_act:+.2f}%</span>", f"預估報酬{sub_text_suffix}")
+            c3 = make_card_html("bd-yellow", "🟡 循環交界", f"{d_tran} <span style='font-size:12px'>天</span>", f"佔比 {p_tran:.0f}%", "#f1c40f", p_tran)
+            c4 = make_card_html("bd-yellow", "⚖️ 交界績效", f"<span style='color:{c_tran_val}'>{r_tran:+.2f}%</span>", f"預估波動{sub_text_suffix}")
+            c5 = make_card_html("bd-green", "🟢 無風/陣風", f"{d_pass} <span style='font-size:12px'>天</span>", f"佔比 {p_pass:.0f}%", "#2ecc71", p_pass)
+            c6 = make_card_html("bd-green", "🛡️ 保守績效", f"<span style='color:{c_pass_val}'>{r_pass:+.2f}%</span>", f"預估損益{sub_text_suffix}")
             st.markdown(f'<div class="dashboard-grid-v183">{c1}{c2}{c3}{c4}{c5}{c6}</div>', unsafe_allow_html=True)
-
             st.divider()
-
-            # --- 5. 繪圖 ---
             fig = go.Figure()
             color_map = {'active': 'rgba(231, 76, 60, 0.15)', 'passive': 'rgba(46, 204, 113, 0.15)', 'transition': 'rgba(241, 196, 15, 0.4)'}
-            shapes = []
-            for z in zones:
-                shapes.append(dict(type="rect", xref="x", yref="paper", x0=z['start'], x1=z['end'], y0=0, y1=1, fillcolor=color_map.get(z['type'], '#eee'), opacity=1, layer="below", line_width=0))
-
-            if '收' in hist_df.columns:
-                fig.add_trace(go.Scatter(x=hist_df['日期'], y=hist_df['收'], mode='lines', name='上櫃指數', line=dict(color='#2c3e50', width=2.5)))
-        
-            if 'MA20' in hist_df.columns:
-                fig.add_trace(go.Scatter(x=hist_df['日期'], y=hist_df['MA20'], mode='lines', name='20MA', line=dict(color='#8e44ad', width=2, dash='dash')))
-                    
+            shapes = []; 
+            for z in zones: shapes.append(dict(type="rect", xref="x", yref="paper", x0=z['start'], x1=z['end'], y0=0, y1=1, fillcolor=color_map.get(z['type'], '#eee'), opacity=1, layer="below", line_width=0))
+            if '收' in hist_df.columns: fig.add_trace(go.Scatter(x=hist_df['日期'], y=hist_df['收'], mode='lines', name='上櫃指數', line=dict(color='#2c3e50', width=2.5)))
+            if 'MA20' in hist_df.columns: fig.add_trace(go.Scatter(x=hist_df['日期'], y=hist_df['MA20'], mode='lines', name='20MA', line=dict(color='#8e44ad', width=2, dash='dash')))
             hover_text = []
             for idx, row in hist_df.iterrows():
                 raw_dir = row.get(target_col, row.get('風度', '')) if target_col else row.get('風度', '')
                 cycle_zh = {"active":"積極", "passive":"保守", "transition":"無方向"}.get(row['cycle'], "-")
-                hover_text.append(f"<b>{row['日期'].strftime('%Y-%m-%d')}</b><br>收盤: {row['收']:,.0f}<br>方向: {raw_dir}<br>狀態: {cycle_zh}")
-
+                hover_text.append(f"<b>{row['日期'].strftime('%Y-%m-%d')}</b><br>收: {row['收']:,.0f}<br>向: {raw_dir}<br>態: {cycle_zh}")
             fig.add_trace(go.Scatter(x=hist_df['日期'], y=hist_df['收'], mode='markers', name='資訊', marker=dict(size=0, opacity=0), hoverinfo='text', hovertext=hover_text))
-
-            fig.update_layout(
-                title=dict(text="📊 市場循環趨勢圖", font=dict(size=20, color='#000000', weight='bold'), x=0.01, y=0.98),
-                shapes=shapes, template="plotly_white", paper_bgcolor='white', plot_bgcolor='white', height=500,
-                font=dict(family="Arial, sans-serif", color='#000000', size=12),
-                xaxis=dict(type="date", showgrid=True, gridcolor='#f0f0f0', tickfont=dict(color='#333'),
-                    rangeslider=dict(visible=True, thickness=0.05, bgcolor='#f8f9fa', borderwidth=0),
-                    rangeselector=dict(buttons=list([
-                        dict(count=1, label="1M", step="month", stepmode="backward"),
-                        dict(count=3, label="3M", step="month", stepmode="backward"),
-                        dict(count=6, label="6M", step="month", stepmode="backward"),
-                        dict(step="all", label="All")
-                    ]), bgcolor="#ecf0f1", activecolor="#3498db", font=dict(color="#2c3e50"), x=0, y=1.05)
-                ),
-                yaxis=dict(title="", showgrid=True, gridcolor='#f0f0f0', tickfont=dict(color='#333'), zeroline=False),
-                margin=dict(t=80, l=15, r=15, b=40), # 縮減邊距
-                legend=dict(orientation="v", yanchor="top", y=1.22, xanchor="right", x=0.99, bgcolor='rgba(255,255,255,0.8)', bordercolor='#eee', borderwidth=1, font=dict(size=12, color='#000000')),
-                hovermode="x unified"
-            )
-            
+            fig.update_layout(title=dict(text="📊 市場循環趨勢圖", font=dict(size=20, color='#000000', weight='bold'), x=0.01, y=0.98), shapes=shapes, template="plotly_white", paper_bgcolor='white', plot_bgcolor='white', height=500, font=dict(family="Arial, sans-serif", color='#000000', size=12), xaxis=dict(type="date", showgrid=True, gridcolor='#f0f0f0', tickfont=dict(color='#333'), rangeslider=dict(visible=True, thickness=0.05, bgcolor='#f8f9fa', borderwidth=0), rangeselector=dict(buttons=list([dict(count=1, label="1M", step="month", stepmode="backward"), dict(count=3, label="3M", step="month", stepmode="backward"), dict(count=6, label="6M", step="month", stepmode="backward"), dict(step="all", label="All")]), bgcolor="#ecf0f1", activecolor="#3498db", font=dict(color="#2c3e50"), x=0, y=1.05)), yaxis=dict(title="", showgrid=True, gridcolor='#f0f0f0', tickfont=dict(color='#333'), zeroline=False), margin=dict(t=80, l=10, r=10, b=40), legend=dict(orientation="v", yanchor="top", y=1.22, xanchor="right", x=0.99, bgcolor='rgba(255,255,255,0.8)', bordercolor='#eee', borderwidth=1, font=dict(size=12, color='#000000')), hovermode="x unified")
             st.plotly_chart(fig, use_container_width=True)
             st.caption("🔴 積極(強風-亂流循環) | 🟡 無方向(循環邊界) | 🟢 保守(無風-陣風循環)")
+        else: st.warning("⚠️ 無資料，請確認 CSV 是否已上傳。")
+
+# --- 新增 Tab 4: 風度指數光譜 (優化版) ---
+
+    with tab4:
+        st.markdown("#### 🌪️ 風度指數光譜 (Trend Spectrum)")
+        st.caption("🌈 線上的顏色代表當日的風度：🔴強風 🟣亂流 🟡陣風 🟢無風。")
+        
+        hist_df_corr = load_history_data()
+        
+        if not hist_df_corr.empty:
+            # 1. 顏色映射
+            wind_colors_map = {'強風': '#e74c3c', '亂流': '#9b59b6', '陣風': '#f1c40f', '無風': '#2ecc71'}
+            point_colors = [wind_colors_map.get(str(w).strip(), '#999') for w in hist_df_corr['風度']]
             
+            # 2. 建立圖表
+            fig_spectrum = go.Figure()
+            
+            # Layer 1: 底層灰色連線 (顯示軌跡) - 改為 spline (圓滑)
+            fig_spectrum.add_trace(go.Scatter(
+                x=hist_df_corr['日期'], 
+                y=hist_df_corr['收'], 
+                mode='lines',
+                name='指數軌跡',
+                line=dict(color='#bdc3c7', width=1.5, shape='spline', smoothing=1.3), # 平滑灰色線
+                hoverinfo='skip' 
+            ))
+            
+            # Layer 2: 上層彩色點 (顯示風度) - 美化樣式
+            fig_spectrum.add_trace(go.Scatter(
+                x=hist_df_corr['日期'], 
+                y=hist_df_corr['收'], 
+                mode='markers',
+                name='風度狀態',
+                marker=dict(
+                    color=point_colors,
+                    size=9, # 稍微放大
+                    line=dict(width=1, color='white'), # 加上白色邊框，產生寶石質感
+                    symbol='circle'
+                ),
+                text=hist_df_corr['風度'],
+                hovertemplate="<b>%{x|%Y-%m-%d}</b><br>指數: %{y}<br>風度: %{text}<extra></extra>"
+            ))
+            
+            fig_spectrum.update_layout(
+                autosize=True,
+                height=500,
+                # 標題設定：左上角
+                title=dict(
+                    text="🌪️ 風度 vs 上櫃指數", 
+                    x=0.01, y=0.98,
+                    font=dict(size=20, color='#000000', weight='bold')
+                ),
+                template="plotly_white",
+                paper_bgcolor='white',
+                plot_bgcolor='white',
+                font=dict(family="Arial, sans-serif", size=14, color='#000000'),
+                xaxis=dict(
+                    # Range Selector 設定
+                    rangeselector=dict(
+                        buttons=list([
+                            dict(count=1, label="1M", step="month", stepmode="backward"),
+                            dict(count=3, label="3M", step="month", stepmode="backward"),
+                            dict(count=6, label="6M", step="month", stepmode="backward"),
+                            dict(step="all", label="All")
+                        ]),
+                        bgcolor="#ecf0f1", activecolor="#3498db", font=dict(color="#2c3e50")
+                    ),
+                    rangeslider=dict(visible=True, thickness=0.05),
+                    type="date",
+                    showgrid=False,
+                    linecolor='#333333', linewidth=2,
+                    tickfont=dict(size=14, weight='bold', color='#000000')
+                ),
+                yaxis=dict(
+                    title="上櫃指數", 
+                    title_font=dict(size=16, weight='bold', color='#000000'),
+                    tickfont=dict(size=14, weight='bold', color='#000000'),
+                    showgrid=True, 
+                    gridcolor='#d4d4d4', 
+                    linecolor='#333333', linewidth=2
+                ),
+                margin=dict(l=20, r=20, t=60, b=20), # 上方邊距稍微加大以容納標題
+                showlegend=False 
+            )
+            
+            st.plotly_chart(fig_spectrum, use_container_width=True)
+
         else:
-            st.warning("⚠️ 無資料，請確認 CSV 是否已上傳。")
+            st.warning("⚠️ 需上傳 kite_history.csv 才能顯示此分析。")
 
     st.markdown("---")
 
