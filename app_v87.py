@@ -1424,7 +1424,7 @@ def show_dashboard():
         # 標題與控制項佈局
         c_title, c_ctrl = st.columns([3, 1])
         with c_title:
-            st.markdown("#### 🔄 2025 年度循環效能分析 (Cycle Performance)")
+            st.markdown("#### 🔄 2025 年度風度循環分析 (Wind Cycle Analysis)")
             st.caption("分析大盤在不同循環下的表現，並透過右側設定換算您的操作績效。")
         with c_ctrl:
             # 【V183 新增】槓桿倍數控制器
@@ -1620,6 +1620,7 @@ def show_dashboard():
             st.warning("⚠️ 無資料，請確認 CSV 是否已上傳。")
 
     st.markdown("---")
+
     st.header("🏆 策略選股月度風雲榜")
     st.caption("統計各策略下，股票出現的次數與所屬族群。")
     stats_df = calculate_monthly_stats(df)
@@ -1657,6 +1658,30 @@ def show_dashboard():
         else: 
             # 備援：舊混合模式
             st.warning("⚠️ 無法取得即時排行，顯示歷史數據")
+
+    st.markdown("---")
+    
+    # --- 【需求2】常用連結與好朋友區塊 ---
+    with st.expander("🔗 常用連結與好朋友 (Useful Links)", expanded=False):
+        col_l1, col_l2, col_l3 = st.columns(3)
+        
+        with col_l1:
+            st.markdown("#### 🛠️ 市場工具")
+            st.markdown('<a href="https://tw.stock.yahoo.com/" target="_blank" class="link-btn">Yahoo! 股市</a>', unsafe_allow_html=True)
+            st.markdown('<a href="https://www.wantgoo.com/" target="_blank" class="link-btn">玩股網</a>', unsafe_allow_html=True)
+            st.markdown('<a href="https://goodinfo.tw/tw/index.asp" target="_blank" class="link-btn">Goodinfo! 台灣股市資訊網</a>', unsafe_allow_html=True)
+
+        with col_l2:
+            st.markdown("#### 📰 新聞與資訊")
+            st.markdown('<a href="https://news.cnyes.com/" target="_blank" class="link-btn">鉅亨網</a>', unsafe_allow_html=True)
+            st.markdown('<a href="https://ctee.com.tw/" target="_blank" class="link-btn">工商時報</a>', unsafe_allow_html=True)
+            st.markdown('<a href="https://money.udn.com/money/index" target="_blank" class="link-btn">經濟日報</a>', unsafe_allow_html=True)
+
+        with col_l3:
+            st.markdown("#### 🤝 好朋友推薦")
+            st.markdown('<a href="https://www.google.com" target="_blank" class="link-btn">Google 搜尋</a>', unsafe_allow_html=True)
+            st.markdown('<a href="#" class="link-btn">待新增連結...</a>', unsafe_allow_html=True)
+            st.markdown('<a href="#" class="link-btn">待新增連結...</a>', unsafe_allow_html=True)
 
 # --- 6. 頁面視圖：管理後台 (後台) ---
 def show_admin_panel():
