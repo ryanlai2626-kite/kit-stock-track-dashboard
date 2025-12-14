@@ -1272,12 +1272,12 @@ def show_dashboard():
 
             /* 內容排版微調 (字體縮小) */
             .t-icon { 
-                font-size: 1.8rem !important; /* Icon 縮小 */
+                font-size: 2.0rem !important; /* Icon 縮小 */
                 margin-bottom: 5px !important; 
                 text-shadow: 0 1px 2px rgba(0,0,0,0.2); 
             }
             .t-title { 
-                font-size: 1.3rem !important; /* 標題縮小 */
+                font-size: 1.4rem !important; /* 標題縮小 */
                 font-weight: 800 !important; 
                 margin-bottom: 5px !important; 
                 color: #FFFFFF !important;
@@ -1285,7 +1285,7 @@ def show_dashboard():
                 line-height: 1.2 !important; 
             }
             .t-desc { 
-                font-size: 0.95rem !important; /* 描述文字縮小 */
+                font-size: 1.0rem !important; /* 描述文字縮小 */
                 font-weight: 500 !important; 
                 line-height: 1.4 !important; 
                 color: rgba(255,255,255,0.95) !important; 
@@ -1848,3 +1848,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
