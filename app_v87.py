@@ -1016,7 +1016,7 @@ def show_dashboard():
             
     st.divider()
 
-# --- V195: 每日風度與風箏數 (修復上方顏色條消失問題) ---
+# --- V196: 每日風度與風箏數 (邊框顏色終極修正版) ---
     st.markdown("### 🌬️ 每日風度與風箏數")
 
     # 1. 準備數據與邏輯
@@ -1030,7 +1030,7 @@ def show_dashboard():
     elif "亂" in str(wind_status): wind_color = "#9b59b6"
     elif "陣" in str(wind_status): wind_color = "#f1c40f"
 
-    # 2. 定義 CSS (維持 Grid 排版，微調邊框邏輯)
+    # 2. 定義 CSS (將邊框設定拆開，避免衝突)
     st.markdown("""
     <style>
         /* Grid 容器 */
@@ -1055,8 +1055,14 @@ def show_dashboard():
             border-radius: 12px !important;
             padding: 15px 10px !important;
             text-align: center !important;
-            /* 這裡設定基礎邊框為灰色，但我們會用 inline style 覆蓋上方邊框 */
-            border: 1px solid #E0E0E0 !important; 
+            
+            /* 關鍵修正：不再使用 border 縮寫，而是分別設定左、右、下 */
+            /* 這樣就不會覆蓋掉 style 屬性裡的 border-top */
+            border-left: 1px solid #E0E0E0 !important;
+            border-right: 1px solid #E0E0E0 !important;
+            border-bottom: 1px solid #E0E0E0 !important;
+            /* border-top 留空，由 inline style 決定 */
+            
             box-shadow: 0 2px 5px rgba(0,0,0,0.05) !important;
             display: flex !important;
             flex-direction: column !important;
@@ -1066,20 +1072,20 @@ def show_dashboard():
             margin: 0 !important;
         }
 
-        .m-label { font-size: 1.1rem; color: #666; font-weight: 600; margin-bottom: 5px; }
+        .m-label { font-size: 1.6rem; color: #666; font-weight: 600; margin-bottom: 5px; }
         .m-value { font-size: 2.5rem; font-weight: 800; color: #2c3e50; margin: 0; line-height: 1.2; }
         .m-sub { font-size: 0.9rem; color: #888; font-weight: bold; margin-top: 5px; }
     </style>
     """, unsafe_allow_html=True)
 
-    # 3. 組合 HTML
-    # 關鍵修正：在 style 裡面加入 !important，確保顏色條不會被 CSS 覆蓋
+    # 3. 組合 HTML (無縮排，加入 !important 確保顏色顯示)
     
     html_metrics = '<div class="metrics-grid">'
     
-    # 3.1 今日風向 (動態顏色)
+    # 3.1 今日風向
+    # 注意：這裡加上 !important 確保它是最高優先級
     html_metrics += f'<div class="metric-box" style="border-top: 5px solid {wind_color} !important;">'
-    html_metrics += f'<div class="m-label">今日風向</div>'
+    html_metrics += f'<div class="m-label">🍃 今日風向</div>'
     html_metrics += f'<div class="m-value">{wind_status}</div>'
     html_metrics += f'<div class="m-sub">{streak_text}</div>'
     html_metrics += '</div>'
