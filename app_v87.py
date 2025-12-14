@@ -545,64 +545,85 @@ def render_global_markets():
     markets = get_global_market_data()
     
     if markets:
-        # 1. 定義 CSS (強制橫向排列 + 隱藏 Code Block 風格)
-        # 注意：這裡使用 st.markdown 注入 style
+        # 1. 定義 CSS (V191: 修正卡片高度不一，強制統一規格)
         st.markdown("""
         <style>
-            /* 容器：強制水平排列、不換行、可滑動 */
+            /* 容器：水平排列、可滑動 */
             div.market-scroll-container {
                 display: flex !important;
                 flex-direction: row !important;
                 flex-wrap: nowrap !important;
                 overflow-x: auto !important;
-                align-items: center !important;
+                /* 關鍵修正 1: 改為 stretch，讓所有卡片高度自動拉伸至一致 */
+                align-items: stretch !important; 
                 gap: 15px !important;
-                padding: 10px 0px 15px 0px !important; /* 底部預留捲軸空間 */
+                padding: 10px 5px 20px 5px !important; /* 增加底部 padding 避免陰影被切掉 */
                 width: 100% !important;
                 -webkit-overflow-scrolling: touch;
             }
             
-            /* 卡片：固定寬度、不壓縮 */
+            /* 卡片：固定寬度、彈性高度、內部排版 */
             div.market-scroll-container .market-card {
                 flex: 0 0 auto !important;
-                width: 160px !important;
-                min-width: 160px !important;
+                width: 170px !important;       /* 稍微加寬一點點以容納長數字 */
+                min-width: 170px !important;
+                min-height: 140px !important;  /* 關鍵修正 2: 設定最小高度，確保視覺一致 */
                 background-color: #FFFFFF !important;
-                border-radius: 10px !important;
+                border-radius: 12px !important;
                 padding: 15px !important;
-                box-shadow: 0 2px 5px rgba(0,0,0,0.08) !important;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.05) !important; /* 優化陰影質感 */
                 border: 1px solid #EAEAEA !important;
                 text-align: center !important;
                 margin: 0 !important;
+                
+                /* 關鍵修正 3: 卡片內部也用 Flex，確保內容垂直置中 */
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: center !important; /* 內容垂直置中 */
+                align-items: center !important;     /* 內容水平置中 */
             }
 
-            /* 確保內容文字正確顯示 */
-            .market-name { font-size: 1.0rem; font-weight: bold; color: #555; margin-bottom: 5px; }
-            .market-price { font-size: 1.6rem; font-weight: 900; margin: 5px 0; }
-            .market-change { font-size: 1.0rem; font-weight: 700; }
+            /* 文字樣式微調 */
+            .market-name { 
+                font-size: 1.0rem; 
+                font-weight: bold; 
+                color: #555; 
+                margin-bottom: 8px !important; /* 增加一點間距 */
+                white-space: nowrap !important; /* 防止標題換行破壞版面 */
+            }
+            .market-price { 
+                font-size: 1.7rem; /* 稍微放大 */
+                font-weight: 900; 
+                margin: 0 0 8px 0 !important;
+                line-height: 1.2 !important;
+            }
+            .market-change { 
+                font-size: 1.0rem; 
+                font-weight: 700; 
+                white-space: nowrap !important;
+            }
             
-            /* 漲跌顏色定義 */
+            /* 顏色與線條 */
             .up-color { color: #e74c3c !important; }
             .down-color { color: #27ae60 !important; }
             .flat-color { color: #7f8c8d !important; }
             
-            /* 卡片底部線條顏色 */
-            .card-up { border-bottom: 4px solid #e74c3c !important; }
-            .card-down { border-bottom: 4px solid #27ae60 !important; }
-            .card-flat { border-bottom: 4px solid #95a5a6 !important; }
+            .card-up { border-bottom: 5px solid #e74c3c !important; }
+            .card-down { border-bottom: 5px solid #27ae60 !important; }
+            .card-flat { border-bottom: 5px solid #95a5a6 !important; }
 
-            /* 隱藏醜醜的捲軸但保留功能 */
-            div.market-scroll-container::-webkit-scrollbar { height: 4px; }
-            div.market-scroll-container::-webkit-scrollbar-thumb { background-color: #ccc; border-radius: 4px; }
+            /* 捲軸樣式 */
+            div.market-scroll-container::-webkit-scrollbar { height: 6px; }
+            div.market-scroll-container::-webkit-scrollbar-track { background: transparent; }
+            div.market-scroll-container::-webkit-scrollbar-thumb { background-color: #d1d5db; border-radius: 10px; }
         </style>
         """, unsafe_allow_html=True)
 
-        # 2. 組合 HTML (關鍵修改：移除所有縮排，避免被當成程式碼區塊)
-        # 我們先建立容器的開頭
+        # 2. 組合 HTML (保持單行串接，避免縮排問題)
         full_html = '<div class="market-scroll-container">'
         
         for m in markets:
-            # 這裡使用單行字串拼接，確保沒有多餘的換行或縮排
+            # 確保內容安全渲染
             card_html = (
                 f'<div class="market-card {m["card_class"]}">'
                 f'<div class="market-name">{m["name"]}</div>'
@@ -612,10 +633,9 @@ def render_global_markets():
             )
             full_html += card_html
             
-        # 容器結尾
         full_html += '</div>'
         
-        # 3. 一次性渲染
+        # 3. 渲染
         st.markdown(full_html, unsafe_allow_html=True)
     
     else:
