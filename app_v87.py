@@ -513,7 +513,7 @@ def plot_fear_greed_gauge(score):
     fig = go.Figure(go.Indicator(
         mode = "gauge+number",
         value = score,
-        number = {'font': {'size': 80, 'color': '#2c3e50', 'family': 'Impact'}}, # 放大至 80, 使用 Impact 字體
+        number = {'font': {'size': 60, 'color': '#2c3e50', 'family': 'Impact'}}, # 放大至 80, 使用 Impact 字體
         domain = {'x': [0, 1], 'y': [0, 1]},
         title = {'text': "市場情緒指標", 'font': {'size': 18, 'color': '#666', 'weight': 'bold'}},
         gauge = {
@@ -1158,9 +1158,9 @@ def show_dashboard():
         )
         st.plotly_chart(fig, use_container_width=True)
 
-# --- 【V175 版面分層與績效說明版】Tab 4: 年度循環戰情室 ---
+# --- 【V180 絕對修復版】Tab 4: 年度循環戰情室 ---
     with tab4:
-        st.markdown("#### 🔄 2025 年度風度循環分析 (Cycle Performance)")
+        st.markdown("#### 🔄 2025 年風度循環分析 (Wind Cycle Analysis)")
         
         hist_df = load_history_data()
         
@@ -1170,32 +1170,32 @@ def show_dashboard():
             hist_df = hist_df.sort_values('日期', ascending=True).reset_index(drop=True)
             
             # 處理 20MA
-            col_20ma = next((c for c in hist_df.columns if '20ma' in c.lower()), None)
+            col_20ma = next((c for c in hist_df.columns if '20ma' in c.lower().replace(' ', '')), None)
             if col_20ma:
                 hist_df['MA20'] = pd.to_numeric(hist_df[col_20ma], errors='coerce')
             else:
                 hist_df['MA20'] = hist_df['收'].rolling(window=20, min_periods=1).mean()
             
             # --- 2. 循環判斷邏輯 ---
-            target_col = '目前行情方向（延續性）'
+            target_col = next((c for c in hist_df.columns if '行情' in c or '方向' in c), None)
             
-            if target_col in hist_df.columns:
+            if target_col:
                 hist_df[target_col] = hist_df[target_col].astype(str).str.strip()
-                def get_cycle_v172(val):
-                    if val == '強風-亂流循環': return 'active'
-                    if val == '無風-陣風循環': return 'passive'
+                def get_cycle_v179(val):
+                    if '強風' in val and '亂流' in val: return 'active'
+                    if '無風' in val and '陣風' in val: return 'passive'
                     return 'transition'
-                hist_df['cycle'] = hist_df[target_col].apply(get_cycle_v172)
+                hist_df['cycle'] = hist_df[target_col].apply(get_cycle_v179)
             else:
-                st.warning("⚠️ 未偵測到「目前行情方向（延續性）」欄位，將使用舊版風度推算。")
+                st.warning("⚠️ 未偵測到行情欄位，將使用舊版風度推算。")
                 hist_df['風度'] = hist_df['風度'].fillna('未知').astype(str).str.strip()
                 def get_cycle_backup(w):
-                    if '強風' in w or '亂流' in w: return 'active'
-                    if '無風' in w or '陣風' in w: return 'passive'
+                    if ('強風' in w or '亂流' in w) and not ('無風' in w or '陣風' in w): return 'active'
+                    if ('無風' in w or '陣風' in w) and not ('強風' in w or '亂流' in w): return 'passive'
                     return 'transition'
                 hist_df['cycle'] = hist_df['風度'].apply(get_cycle_backup)
 
-            # --- 3. 計算區塊 (無縫接軌演算法) ---
+            # --- 3. 計算區塊 ---
             zones = []
             cycle_stats = {
                 'active': {'count': 0, 'days': 0, 'return': []}, 
@@ -1213,17 +1213,13 @@ def show_dashboard():
                     if row['cycle'] != curr_cycle:
                         end_date = row['日期']
                         end_price = hist_df.iloc[i-1]['收']
-                        
                         ret = ((end_price - curr_price) / curr_price * 100) if curr_price > 0 else 0
                         days = (end_date - curr_start).days
-                        
                         zones.append({'start': curr_start, 'end': end_date, 'type': curr_cycle, 'return': ret})
-                        
                         if curr_cycle in cycle_stats:
                             cycle_stats[curr_cycle]['count'] += 1
                             cycle_stats[curr_cycle]['days'] += days
                             cycle_stats[curr_cycle]['return'].append(ret)
-
                         curr_start = row['日期']
                         curr_price = row['收']
                         curr_cycle = row['cycle']
@@ -1232,141 +1228,151 @@ def show_dashboard():
                 last_price = hist_df.iloc[-1]['收']
                 last_ret = ((last_price - curr_price) / curr_price * 100) if curr_price > 0 else 0
                 last_days = (last_end - curr_start).days
-                
                 zones.append({'start': curr_start, 'end': last_end, 'type': curr_cycle, 'return': last_ret})
                 if curr_cycle in cycle_stats:
                     cycle_stats[curr_cycle]['count'] += 1
                     cycle_stats[curr_cycle]['days'] += last_days
                     cycle_stats[curr_cycle]['return'].append(last_ret)
 
-            # --- 4. 儀表板 Metrics ---
+            # --- 4. 【重點修復】CSS 與 HTML 徹底分離 ---
             def avg(l): return sum(l)/len(l) if l else 0
             total_days = sum(stats['days'] for stats in cycle_stats.values()) or 1
             
-            cols = st.columns(5)
-            # 這裡我們稍微調整說明文字，讓使用者知道這是平均值
-            metrics = [
-                ("🔴 強風亂流循環", 'active', "normal"),
-                ("🚀 積極平均績效", 'active_ret', None), # 改名更精確
-                ("🟡 循環邊界", 'transition', "off"),
-                ("🟢 無風陣風循環", 'passive', "inverse"),
-                ("🛡️ 保守平均績效", 'passive_ret', None) # 改名更精確
-            ]
+            # 數據變數
+            d_act = cycle_stats['active']['days']; p_act = d_act/total_days*100; r_act = avg(cycle_stats['active']['return'])
+            d_pass = cycle_stats['passive']['days']; p_pass = d_pass/total_days*100; r_pass = avg(cycle_stats['passive']['return'])
+            d_tran = cycle_stats['transition']['days']; p_tran = d_tran/total_days*100
             
-            for i, (label, key, color) in enumerate(metrics):
-                with cols[i]:
-                    if 'ret' in key:
-                        cycle_key = key.replace('_ret', '')
-                        val = avg(cycle_stats[cycle_key]['return'])
-                        st.metric(label, f"{val:.2f}%", help="計算方式：將所有該循環區段的漲跌幅加總後，除以出現次數。")
-                    else:
-                        days = cycle_stats[key]['days']
-                        pct = days / total_days * 100
-                        st.metric(label, f"{days} 天", f"佔 {pct:.0f}%", delta_color=color)
+            c_act_val = '#e74c3c' if r_act > 0 else '#27ae60'
+            c_pass_val = '#e74c3c' if r_pass > 0 else '#27ae60'
+
+            # A. 純 CSS 字串 (不使用 f-string，避免大括號衝突)
+            css_styles = """
+            <style>
+                .dashboard-grid {
+                    display: grid;
+                    grid-template-columns: repeat(5, 1fr);
+                    gap: 12px;
+                    margin-bottom: 25px;
+                }
+                @media (max-width: 768px) {
+                    .dashboard-grid {
+                        grid-template-columns: 1fr 1fr;
+                    }
+                    .card-transition {
+                        grid-column: span 2;
+                        order: 5;
+                    }
+                    .order-1 { order: 1; }
+                    .order-2 { order: 2; }
+                    .order-3 { order: 3; }
+                    .order-4 { order: 4; }
+                }
+                .metric-card {
+                    background-color: white;
+                    border-radius: 12px;
+                    padding: 16px 10px;
+                    text-align: center;
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+                    border: 1px solid #e0e0e0;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    height: 100%;
+                }
+                .border-red { border-top: 5px solid #e74c3c; }
+                .border-green { border-top: 5px solid #2ecc71; }
+                .border-yellow { border-top: 5px solid #f1c40f; }
+                
+                .m-label { font-size: 18px; font-weight: bold; color: #555; margin-bottom: 5px; }
+                .m-value { font-size: 22px; font-weight: 800; color: #2c3e50; margin: 2px 0; }
+                .m-sub { font-size: 12px; color: #999; }
+                .prog-bg { width: 100%; height: 5px; background: #f0f0f0; border-radius: 3px; margin-top: 8px; overflow: hidden; }
+                .prog-fill { height: 100%; border-radius: 3px; }
+            </style>
+            """
+
+            # B. 純 HTML f-string (只放入變數)
+            html_content = f"""
+            <div class="dashboard-grid">
+                <div class="metric-card border-red order-1">
+                    <div class="m-label">🔴 強風亂流循環</div>
+                    <div class="m-value">{d_act} <span style="font-size:12px">天</span></div>
+                    <div class="m-sub">佔比 {p_act:.0f}%</div>
+                    <div class="prog-bg"><div class="prog-fill" style="width:{p_act}%; background:#e74c3c;"></div></div>
+                </div>
+                <div class="metric-card border-red order-2">
+                    <div class="m-label">🚀 積極平均績效</div>
+                    <div class="m-value" style="color:{c_act_val}">{r_act:+.2f}%</div>
+                    <div class="m-sub">攻擊期望值</div>
+                </div>
+                <div class="metric-card border-green order-3">
+                    <div class="m-label">🟢 無風陣風循環</div>
+                    <div class="m-value">{d_pass} <span style="font-size:12px">天</span></div>
+                    <div class="m-sub">佔比 {p_pass:.0f}%</div>
+                    <div class="prog-bg"><div class="prog-fill" style="width:{p_pass}%; background:#2ecc71;"></div></div>
+                </div>
+                <div class="metric-card border-green order-4">
+                    <div class="m-label">🛡️ 保守平均績效</div>
+                    <div class="m-value" style="color:{c_pass_val}">{r_pass:+.2f}%</div>
+                    <div class="m-sub">防守期望值</div>
+                </div>
+                <div class="metric-card border-yellow card-transition">
+                    <div class="m-label">🟡 循環邊界</div>
+                    <div class="m-value">{d_tran} <span style="font-size:12px">天</span></div>
+                    <div class="m-sub">佔比 {p_tran:.0f}%</div>
+                    <div class="prog-bg"><div class="prog-fill" style="width:{p_tran}%; background:#f1c40f;"></div></div>
+                </div>
+            </div>
+            """
+
+            # 合併渲染 (絕對不會報錯)
+            st.markdown(css_styles + html_content, unsafe_allow_html=True)
 
             st.divider()
 
-            # --- 5. 繪圖 (V175: 版面分層優化) ---
+            # --- 5. 繪圖 (V180) ---
             fig = go.Figure()
-            
-            color_map = {
-                'active': 'rgba(231, 76, 60, 0.15)',      
-                'passive': 'rgba(46, 204, 113, 0.15)',    
-                'transition': 'rgba(241, 196, 15, 0.4)'   
-            }
-            
+            color_map = {'active': 'rgba(231, 76, 60, 0.15)', 'passive': 'rgba(46, 204, 113, 0.15)', 'transition': 'rgba(241, 196, 15, 0.4)'}
             shapes = []
             for z in zones:
-                shapes.append(dict(
-                    type="rect", xref="x", yref="paper",
-                    x0=z['start'], x1=z['end'], 
-                    y0=0, y1=1,
-                    fillcolor=color_map.get(z['type'], '#eee'),
-                    opacity=1, layer="below", line_width=0,
-                ))
+                shapes.append(dict(type="rect", xref="x", yref="paper", x0=z['start'], x1=z['end'], y0=0, y1=1, fillcolor=color_map.get(z['type'], '#eee'), opacity=1, layer="below", line_width=0))
 
             if '收' in hist_df.columns:
-                fig.add_trace(go.Scatter(
-                    x=hist_df['日期'], y=hist_df['收'], mode='lines', name='加權指數',
-                    line=dict(color='#2c3e50', width=2.5),
-                    hovertemplate='<b>日期</b>: %{x|%Y-%m-%d}<br><b>收盤</b>: %{y:,.0f}<extra></extra>'
-                ))
+                fig.add_trace(go.Scatter(x=hist_df['日期'], y=hist_df['收'], mode='lines', name='櫃買指數', line=dict(color='#2c3e50', width=2.5)))
             
             if 'MA20' in hist_df.columns:
-                fig.add_trace(go.Scatter(
-                    x=hist_df['日期'], y=hist_df['MA20'], mode='lines', name='20MA',
-                    line=dict(color='#8e44ad', width=2, dash='dash'),
-                    hovertemplate='<b>20MA</b>: %{y:,.0f}<extra></extra>'
-                ))
+                fig.add_trace(go.Scatter(x=hist_df['日期'], y=hist_df['MA20'], mode='lines', name='20MA', line=dict(color='#8e44ad', width=2, dash='dash')))
             
             hover_text = []
             for idx, row in hist_df.iterrows():
-                raw_direction = row.get(target_col, row.get('風度', ''))
-                cycle_zh = {"active":"強風亂流循環(紅)", "passive":"無風陣風循環(綠)", "transition":"循環交界(黃)"}.get(row['cycle'], "未知")
-                txt = f"<b>日期</b>: {row['日期'].strftime('%Y-%m-%d')}<br><b>價格</b>: {row['收']:,.0f}<br><b>方向</b>: {raw_direction}<br><b>狀態</b>: {cycle_zh}"
-                hover_text.append(txt)
+                raw_dir = row.get(target_col, row.get('風度', '')) if target_col else row.get('風度', '')
+                cycle_zh = {"active":"積極(紅)", "passive":"保守(綠)", "transition":"過度(黃)"}.get(row['cycle'], "-")
+                hover_text.append(f"<b>{row['日期'].strftime('%Y-%m-%d')}</b><br>收: {row['收']:,.0f}<br>向: {raw_dir}<br>態: {cycle_zh}")
 
-            fig.add_trace(go.Scatter(
-                x=hist_df['日期'], y=hist_df['收'], mode='markers', name='詳細資訊',
-                marker=dict(size=0, opacity=0), hoverinfo='text', hovertext=hover_text
-            ))
+            fig.add_trace(go.Scatter(x=hist_df['日期'], y=hist_df['收'], mode='markers', name='資訊', marker=dict(size=0, opacity=0), hoverinfo='text', hovertext=hover_text))
 
             fig.update_layout(
-                # 【標題】：移至圖表內部左上角
-                title=dict(
-                    text="📊 風度循環趨勢圖",
-                    font=dict(size=20, color='#000000', weight='bold'),
-                    x=0.01, y=0.98, xanchor='left', yanchor='top'
-                ),
-                shapes=shapes,
-                template="plotly_white",
-                paper_bgcolor='white', plot_bgcolor='white',
-                height=500,
+                title=dict(text="📊 市場循環趨勢圖", font=dict(size=20, color='#000000', weight='bold'), x=0.01, y=0.96),
+                shapes=shapes, template="plotly_white", paper_bgcolor='white', plot_bgcolor='white', height=500,
                 font=dict(family="Arial, sans-serif", color='#000000', size=12),
-                
-                xaxis=dict(
-                    type="date", 
-                    showgrid=True, gridcolor='#f0f0f0', gridwidth=1,
-                    tickfont=dict(size=12, color='#333333'),
-                    # 滑桿
+                xaxis=dict(type="date", showgrid=True, gridcolor='#f0f0f0', tickfont=dict(color='#333'),
                     rangeslider=dict(visible=True, thickness=0.05, bgcolor='#f8f9fa', borderwidth=0),
-                    # 【按鈕】：移至圖表上方外部，避免壓到標題
-                    rangeselector=dict(
-                        buttons=list([
-                            dict(count=1, label="1M", step="month", stepmode="backward"),
-                            dict(count=3, label="3M", step="month", stepmode="backward"),
-                            dict(count=6, label="半年", step="month", stepmode="backward"), # 已補回
-                            dict(step="all", label="All")
-                        ]),
-                        bgcolor="#ecf0f1", activecolor="#3498db", font=dict(color="#2c3e50"),
-                        x=0, y=1.15 # 【關鍵修正】y=1.15 讓它高於標題，不重疊
-                    )
+                    rangeselector=dict(buttons=list([
+                        dict(count=1, label="1M", step="month", stepmode="backward"),
+                        dict(count=3, label="3M", step="month", stepmode="backward"),
+                        dict(count=6, label="6M", step="month", stepmode="backward"),
+                        dict(step="all", label="All")
+                    ]), bgcolor="#ecf0f1", activecolor="#3498db", font=dict(color="#2c3e50"), x=0, y=1.03)
                 ),
-                yaxis=dict(
-                    title="", showgrid=True, gridcolor='#f0f0f0', 
-                    tickfont=dict(color='#333333'), zeroline=False
-                ),
-                # 【邊距】：加大上方邊距 (t=100) 以容納按鈕
-                margin=dict(t=100, l=10, r=10, b=40),
-                
-                # 【圖例】：移至圖表內部右上角，與標題(左上)分開
-                legend=dict(
-                    orientation="v", yanchor="top", y=0.98, xanchor="right", x=0.99,
-                    bgcolor='rgba(255,255,255,0.7)', bordercolor='#eee', borderwidth=1,
-                    font=dict(size=10, color='#000000')
-                ),
+                yaxis=dict(title="", showgrid=True, gridcolor='#f0f0f0', tickfont=dict(color='#333'), zeroline=False),
+                margin=dict(t=80, l=10, r=10, b=40),
+                legend=dict(orientation="v", yanchor="top", y=0.98, xanchor="right", x=0.99, bgcolor='rgba(255,255,255,0.8)', bordercolor='#eee', borderwidth=1, font=dict(size=10, color='#000000')),
                 hovermode="x unified"
             )
             
             st.plotly_chart(fig, use_container_width=True)
-            
-            st.markdown("""
-            <div style="font-size: 12px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: -10px; color:#555;">
-                <div style="display:flex; align-items:center;"><div style="width:12px; height:12px; background:#e74c3c; margin-right:5px; opacity:0.5;"></div>積極(強風-亂流)</div>
-                <div style="display:flex; align-items:center;"><div style="width:12px; height:12px; background:#f1c40f; margin-right:5px; opacity:0.6;"></div>無方向(循環交界)</div>
-                <div style="display:flex; align-items:center;"><div style="width:12px; height:12px; background:#2ecc71; margin-right:5px; opacity:0.5;"></div>保守(無風-陣風)</div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.caption("🔴 積極(強風亂流循環) | 🟡 無方向(循環邊界) | 🟢 保守(無風陣風循環)")
             
         else:
             st.warning("⚠️ 無資料，請確認 CSV 是否已上傳。")
