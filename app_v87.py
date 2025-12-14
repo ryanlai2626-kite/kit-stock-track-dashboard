@@ -1158,30 +1158,44 @@ def show_dashboard():
         )
         st.plotly_chart(fig, use_container_width=True)
 
-# --- 【V165 最終版】Tab 4: 年度循環戰情室 (含 20MA + 過度邊界) ---
+# --- 【V175 版面分層與績效說明版】Tab 4: 年度循環戰情室 ---
     with tab4:
-        st.markdown("#### 🔄 2025 年度循環效能分析 (Cycle Performance)")
+        st.markdown("#### 🔄 2025 年度風度循環分析 (Cycle Performance)")
         
         hist_df = load_history_data()
         
         if not hist_df.empty:
             # --- 1. 資料前處理 ---
-            # 確保按日期排序以計算 MA
-            hist_df = hist_df.sort_values('日期', ascending=True)
+            hist_df['日期'] = pd.to_datetime(hist_df['日期'], format='mixed', errors='coerce')
+            hist_df = hist_df.sort_values('日期', ascending=True).reset_index(drop=True)
             
-            # 【新功能】計算 20MA (月線)
-            hist_df['MA20'] = hist_df['收'].rolling(window=20).mean()
+            # 處理 20MA
+            col_20ma = next((c for c in hist_df.columns if '20ma' in c.lower()), None)
+            if col_20ma:
+                hist_df['MA20'] = pd.to_numeric(hist_df[col_20ma], errors='coerce')
+            else:
+                hist_df['MA20'] = hist_df['收'].rolling(window=20, min_periods=1).mean()
             
-            # 定義循環邏輯 (符合您的需求：非紅非綠即為過度)
-            def get_cycle(wind):
-                w = str(wind).strip()
-                if w in ['強風', '亂流']: return 'active'     # 紅色：積極
-                if w in ['陣風', '無風']: return 'passive'    # 綠色：保守
-                return 'transition'                          # 黃色：過度邊界 (其他所有狀態)
-                
-            hist_df['cycle'] = hist_df['風度'].apply(get_cycle)
+            # --- 2. 循環判斷邏輯 ---
+            target_col = '目前行情方向（延續性）'
             
-            # 初始化統計容器
+            if target_col in hist_df.columns:
+                hist_df[target_col] = hist_df[target_col].astype(str).str.strip()
+                def get_cycle_v172(val):
+                    if val == '強風-亂流循環': return 'active'
+                    if val == '無風-陣風循環': return 'passive'
+                    return 'transition'
+                hist_df['cycle'] = hist_df[target_col].apply(get_cycle_v172)
+            else:
+                st.warning("⚠️ 未偵測到「目前行情方向（延續性）」欄位，將使用舊版風度推算。")
+                hist_df['風度'] = hist_df['風度'].fillna('未知').astype(str).str.strip()
+                def get_cycle_backup(w):
+                    if '強風' in w or '亂流' in w: return 'active'
+                    if '無風' in w or '陣風' in w: return 'passive'
+                    return 'transition'
+                hist_df['cycle'] = hist_df['風度'].apply(get_cycle_backup)
+
+            # --- 3. 計算區塊 (無縫接軌演算法) ---
             zones = []
             cycle_stats = {
                 'active': {'count': 0, 'days': 0, 'return': []}, 
@@ -1189,182 +1203,173 @@ def show_dashboard():
                 'transition': {'count': 0, 'days': 0, 'return': []}
             }
             
-            # 計算區塊與績效
             if not hist_df.empty:
-                curr_start_date = hist_df.iloc[0]['日期']
-                curr_start_price = hist_df.iloc[0]['收']
+                curr_start = hist_df.iloc[0]['日期']
+                curr_price = hist_df.iloc[0]['收']
                 curr_cycle = hist_df.iloc[0]['cycle']
                 
                 for i in range(1, len(hist_df)):
                     row = hist_df.iloc[i]
                     if row['cycle'] != curr_cycle:
-                        # 結算上一段
-                        end_date = hist_df.iloc[i-1]['日期']
+                        end_date = row['日期']
                         end_price = hist_df.iloc[i-1]['收']
                         
-                        zone_ret = 0
-                        if curr_start_price > 0:
-                            zone_ret = ((end_price - curr_start_price) / curr_start_price) * 100
+                        ret = ((end_price - curr_price) / curr_price * 100) if curr_price > 0 else 0
+                        days = (end_date - curr_start).days
                         
-                        days_diff = (end_date - curr_start_date).days
+                        zones.append({'start': curr_start, 'end': end_date, 'type': curr_cycle, 'return': ret})
                         
-                        zones.append({
-                            'start': curr_start_date, 
-                            'end': end_date, 
-                            'type': curr_cycle,
-                            'return': zone_ret
-                        })
-                        
-                        # 統計
                         if curr_cycle in cycle_stats:
                             cycle_stats[curr_cycle]['count'] += 1
-                            cycle_stats[curr_cycle]['days'] += days_diff
-                            cycle_stats[curr_cycle]['return'].append(zone_ret)
+                            cycle_stats[curr_cycle]['days'] += days
+                            cycle_stats[curr_cycle]['return'].append(ret)
 
-                        # 開啟新段
-                        curr_start_date = row['日期']
-                        curr_start_price = row['收']
+                        curr_start = row['日期']
+                        curr_price = row['收']
                         curr_cycle = row['cycle']
                 
-                # 收尾最後一段
-                last_end_date = hist_df.iloc[-1]['日期']
-                last_end_price = hist_df.iloc[-1]['收']
-                last_ret = ((last_end_price - curr_start_price) / curr_start_price) * 100 if curr_start_price > 0 else 0
-                zones.append({'start': curr_start_date, 'end': last_end_date, 'type': curr_cycle, 'return': last_ret})
+                last_end = hist_df.iloc[-1]['日期'] + pd.Timedelta(days=1)
+                last_price = hist_df.iloc[-1]['收']
+                last_ret = ((last_price - curr_price) / curr_price * 100) if curr_price > 0 else 0
+                last_days = (last_end - curr_start).days
+                
+                zones.append({'start': curr_start, 'end': last_end, 'type': curr_cycle, 'return': last_ret})
                 if curr_cycle in cycle_stats:
                     cycle_stats[curr_cycle]['count'] += 1
-                    cycle_stats[curr_cycle]['days'] += (last_end_date - curr_start_date).days
+                    cycle_stats[curr_cycle]['days'] += last_days
                     cycle_stats[curr_cycle]['return'].append(last_ret)
 
-            # --- 2. 頂部數據儀表板 ---
-            def avg_list(lst): return sum(lst)/len(lst) if lst else 0
+            # --- 4. 儀表板 Metrics ---
+            def avg(l): return sum(l)/len(l) if l else 0
+            total_days = sum(stats['days'] for stats in cycle_stats.values()) or 1
             
-            act_days = cycle_stats['active']['days']
-            pass_days = cycle_stats['passive']['days']
-            trans_days = cycle_stats['transition']['days']
-            total_days = act_days + pass_days + trans_days
-            if total_days == 0: total_days = 1
+            cols = st.columns(5)
+            # 這裡我們稍微調整說明文字，讓使用者知道這是平均值
+            metrics = [
+                ("🔴 強風亂流循環", 'active', "normal"),
+                ("🚀 積極平均績效", 'active_ret', None), # 改名更精確
+                ("🟡 循環邊界", 'transition', "off"),
+                ("🟢 無風陣風循環", 'passive', "inverse"),
+                ("🛡️ 保守平均績效", 'passive_ret', None) # 改名更精確
+            ]
             
-            act_avg_ret = avg_list(cycle_stats['active']['return'])
-            pass_avg_ret = avg_list(cycle_stats['passive']['return'])
-            
-            m1, m2, m3, m4, m5 = st.columns(5)
-            with m1: st.metric("🔴 積極循環", f"{act_days} 天", f"佔 {act_days/total_days*100:.0f}%", delta_color="normal")
-            with m2: st.metric("🚀 積極績效", f"{act_avg_ret:.2f}%")
-            with m3: st.metric("🟡 過度邊界", f"{trans_days} 天", f"佔 {trans_days/total_days*100:.0f}%", delta_color="off")
-            with m4: st.metric("🟢 保守循環", f"{pass_days} 天", f"佔 {pass_days/total_days*100:.0f}%", delta_color="inverse")
-            with m5: st.metric("🛡️ 保守績效", f"{pass_avg_ret:.2f}%")
-            
+            for i, (label, key, color) in enumerate(metrics):
+                with cols[i]:
+                    if 'ret' in key:
+                        cycle_key = key.replace('_ret', '')
+                        val = avg(cycle_stats[cycle_key]['return'])
+                        st.metric(label, f"{val:.2f}%", help="計算方式：將所有該循環區段的漲跌幅加總後，除以出現次數。")
+                    else:
+                        days = cycle_stats[key]['days']
+                        pct = days / total_days * 100
+                        st.metric(label, f"{days} 天", f"佔 {pct:.0f}%", delta_color=color)
+
             st.divider()
 
-            # --- 3. 繪製圖表 (含 20MA) ---
-            fig_cycle = go.Figure()
+            # --- 5. 繪圖 (V175: 版面分層優化) ---
+            fig = go.Figure()
             
-            # A. 背景色塊 (加入過度邊界顏色)
-            shapes = []
             color_map = {
-                'active': 'rgba(255, 99, 132, 0.15)',    # 紅色
-                'passive': 'rgba(75, 192, 192, 0.15)',   # 綠色
-                'transition': 'rgba(255, 205, 86, 0.3)'  # 【新功能】黃色：過度邊界 (稍微加深一點透明度以利辨識)
+                'active': 'rgba(231, 76, 60, 0.15)',      
+                'passive': 'rgba(46, 204, 113, 0.15)',    
+                'transition': 'rgba(241, 196, 15, 0.4)'   
             }
             
+            shapes = []
             for z in zones:
-                if z['start'] != z['end']:
-                    shapes.append(dict(
-                        type="rect",
-                        xref="x", yref="paper",
-                        x0=z['start'], x1=z['end'],
-                        y0=0, y1=1,
-                        fillcolor=color_map.get(z['type'], '#eee'),
-                        opacity=1, 
-                        layer="below",
-                        line_width=0,
-                    ))
-            
-            # B1. 收盤價線條 (加權指數)
+                shapes.append(dict(
+                    type="rect", xref="x", yref="paper",
+                    x0=z['start'], x1=z['end'], 
+                    y0=0, y1=1,
+                    fillcolor=color_map.get(z['type'], '#eee'),
+                    opacity=1, layer="below", line_width=0,
+                ))
+
             if '收' in hist_df.columns:
-                fig_cycle.add_trace(go.Scatter(
-                    x=hist_df['日期'],
-                    y=hist_df['收'],
-                    mode='lines',
-                    name='加權指數',
-                    line=dict(color='#2c3e50', width=3), # 深藍色，加粗
+                fig.add_trace(go.Scatter(
+                    x=hist_df['日期'], y=hist_df['收'], mode='lines', name='加權指數',
+                    line=dict(color='#2c3e50', width=2.5),
                     hovertemplate='<b>日期</b>: %{x|%Y-%m-%d}<br><b>收盤</b>: %{y:,.0f}<extra></extra>'
                 ))
-
-            # B2. 【新功能】20MA 線條
+            
             if 'MA20' in hist_df.columns:
-                fig_cycle.add_trace(go.Scatter(
-                    x=hist_df['日期'],
-                    y=hist_df['MA20'],
-                    mode='lines',
-                    name='20MA (月線)',
-                    line=dict(color='#9b59b6', width=2, dash='solid'), # 紫色，稍微細一點
+                fig.add_trace(go.Scatter(
+                    x=hist_df['日期'], y=hist_df['MA20'], mode='lines', name='20MA',
+                    line=dict(color='#8e44ad', width=2, dash='dash'),
                     hovertemplate='<b>20MA</b>: %{y:,.0f}<extra></extra>'
                 ))
-
-            # C. 隱形標記點 (Tooltip)
-            fig_cycle.add_trace(go.Scatter(
-                x=hist_df['日期'],
-                y=hist_df['收'],
-                mode='markers',
-                name='當日風度',
-                marker=dict(size=0, opacity=0),
-                hoverinfo='text',
-                hovertext=[f"風度: {w}<br>狀態: {c}" for w, c in zip(hist_df['風度'], hist_df['cycle'])]
-            ))
             
-            # D. Layout 設定
-            fig_cycle.update_layout(
+            hover_text = []
+            for idx, row in hist_df.iterrows():
+                raw_direction = row.get(target_col, row.get('風度', ''))
+                cycle_zh = {"active":"強風亂流循環(紅)", "passive":"無風陣風循環(綠)", "transition":"循環交界(黃)"}.get(row['cycle'], "未知")
+                txt = f"<b>日期</b>: {row['日期'].strftime('%Y-%m-%d')}<br><b>價格</b>: {row['收']:,.0f}<br><b>方向</b>: {raw_direction}<br><b>狀態</b>: {cycle_zh}"
+                hover_text.append(txt)
+
+            fig.add_trace(go.Scatter(
+                x=hist_df['日期'], y=hist_df['收'], mode='markers', name='詳細資訊',
+                marker=dict(size=0, opacity=0), hoverinfo='text', hovertext=hover_text
+            ))
+
+            fig.update_layout(
+                # 【標題】：移至圖表內部左上角
                 title=dict(
-                    text="📊 市場循環與 20MA 趨勢圖 (紅=積極 / 黃=過度 / 綠=保守)",
-                    font=dict(size=20, color='#000000', weight='bold')
+                    text="📊 風度循環趨勢圖",
+                    font=dict(size=20, color='#000000', weight='bold'),
+                    x=0.01, y=0.98, xanchor='left', yanchor='top'
                 ),
                 shapes=shapes,
                 template="plotly_white",
-                height=550,
-                paper_bgcolor='white',
-                plot_bgcolor='white',
-                font=dict(family="Arial, sans-serif", color='#000000', size=14),
+                paper_bgcolor='white', plot_bgcolor='white',
+                height=500,
+                font=dict(family="Arial, sans-serif", color='#000000', size=12),
+                
                 xaxis=dict(
-                    type="date",
-                    showgrid=True,
-                    gridcolor='#e0e0e0',
-                    tickfont=dict(size=14, color='#000000', weight='bold'),
-                    rangeslider=dict(visible=True, thickness=0.08, bgcolor='#f9f9f9'),
+                    type="date", 
+                    showgrid=True, gridcolor='#f0f0f0', gridwidth=1,
+                    tickfont=dict(size=12, color='#333333'),
+                    # 滑桿
+                    rangeslider=dict(visible=True, thickness=0.05, bgcolor='#f8f9fa', borderwidth=0),
+                    # 【按鈕】：移至圖表上方外部，避免壓到標題
                     rangeselector=dict(
                         buttons=list([
-                            dict(count=1, label="1月", step="month", stepmode="backward"),
-                            dict(count=3, label="3月", step="month", stepmode="backward"),
-                            dict(count=6, label="半年", step="month", stepmode="backward"),
-                            dict(step="all", label="全")
+                            dict(count=1, label="1M", step="month", stepmode="backward"),
+                            dict(count=3, label="3M", step="month", stepmode="backward"),
+                            dict(count=6, label="半年", step="month", stepmode="backward"), # 已補回
+                            dict(step="all", label="All")
                         ]),
-                        font=dict(color='#000000')
+                        bgcolor="#ecf0f1", activecolor="#3498db", font=dict(color="#2c3e50"),
+                        x=0, y=1.15 # 【關鍵修正】y=1.15 讓它高於標題，不重疊
                     )
                 ),
                 yaxis=dict(
-                    title="指數價格",
-                    title_font=dict(size=16, color='#000000', weight='bold'),
-                    showgrid=True,
-                    gridcolor='#e0e0e0',
-                    tickfont=dict(size=14, color='#000000', weight='bold'),
-                    zeroline=False
+                    title="", showgrid=True, gridcolor='#f0f0f0', 
+                    tickfont=dict(color='#333333'), zeroline=False
                 ),
+                # 【邊距】：加大上方邊距 (t=100) 以容納按鈕
+                margin=dict(t=100, l=10, r=10, b=40),
+                
+                # 【圖例】：移至圖表內部右上角，與標題(左上)分開
                 legend=dict(
-                    orientation="h",
-                    yanchor="bottom", y=1.05,
-                    xanchor="right", x=1,
-                    font=dict(color='#000000')
+                    orientation="v", yanchor="top", y=0.98, xanchor="right", x=0.99,
+                    bgcolor='rgba(255,255,255,0.7)', bordercolor='#eee', borderwidth=1,
+                    font=dict(size=10, color='#000000')
                 ),
-                hovermode="x unified",
-                margin=dict(t=80, l=60, r=50, b=60)
+                hovermode="x unified"
             )
             
-            st.plotly_chart(fig_cycle, use_container_width=True)
-            st.caption("💡 說明：紫色線為 20MA (月均線)，可用於判斷短線趨勢支撐或壓力。黃色背景為過度邊界區。")
+            st.plotly_chart(fig, use_container_width=True)
+            
+            st.markdown("""
+            <div style="font-size: 12px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: -10px; color:#555;">
+                <div style="display:flex; align-items:center;"><div style="width:12px; height:12px; background:#e74c3c; margin-right:5px; opacity:0.5;"></div>積極(強風-亂流)</div>
+                <div style="display:flex; align-items:center;"><div style="width:12px; height:12px; background:#f1c40f; margin-right:5px; opacity:0.6;"></div>無方向(循環交界)</div>
+                <div style="display:flex; align-items:center;"><div style="width:12px; height:12px; background:#2ecc71; margin-right:5px; opacity:0.5;"></div>保守(無風-陣風)</div>
+            </div>
+            """, unsafe_allow_html=True)
             
         else:
-            st.warning("⚠️ 尚未載入歷史資料。")
+            st.warning("⚠️ 無資料，請確認 CSV 是否已上傳。")
 
     st.markdown("---")
     st.header("🏆 策略選股月度風雲榜")
