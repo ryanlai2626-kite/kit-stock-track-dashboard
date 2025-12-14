@@ -1004,7 +1004,7 @@ def show_dashboard():
 
     render_global_markets()
 
-    with st.expander("📊 大盤指數走勢圖 (點擊展開)", expanded=True):
+    with st.expander("📊 大盤指數走勢圖 (點擊展開)", expanded=False):
         col_m1, col_m2 = st.columns([1, 4])
         with col_m1:
             market_type = st.radio("選擇市場", ["上市", "上櫃"], horizontal=True)
@@ -1220,10 +1220,10 @@ def show_dashboard():
         st.plotly_chart(fig_line, use_container_width=True)
     
     with tab2:
-        # 【V198】市場觀察趨勢定義 (精緻縮小版 + 白色字體 + 響應式)
+        # 【V199】市場觀察趨勢定義 (護眼柔和漸層版)
         st.markdown("#### 🌬️ 市場觀察趨勢定義")
         
-        # 1. 定義 CSS (強制白色字體、縮小尺寸)
+        # 1. 定義 CSS (調整背景漸層為護眼色系)
         st.markdown("""
         <style>
             /* 容器：Flexbox 設定 */
@@ -1232,32 +1232,32 @@ def show_dashboard():
                 flex-direction: row !important;
                 flex-wrap: nowrap !important;
                 overflow-x: auto !important;
-                gap: 10px !important;  /* 間距縮小 */
+                gap: 10px !important;
                 padding: 5px 2px 10px 2px !important;
                 width: 100% !important;
                 -webkit-overflow-scrolling: touch;
                 align-items: stretch !important;
             }
 
-            /* 卡片基礎樣式 (縮小版) */
+            /* 卡片基礎樣式 */
             div.trend-scroll-box .t-card {
                 flex: 0 0 auto !important;
-                width: 160px !important;       /* 手機版寬度縮小 (原本240 -> 160) */
+                width: 160px !important;
                 min-width: 160px !important;
-                border-radius: 10px !important; /* 圓角稍微縮小 */
-                padding: 10px 8px !important;   /* 內距縮小 */
-                color: #FFFFFF !important;      /* 關鍵：強制白色字體 */
-                box-shadow: 0 3px 6px rgba(0,0,0,0.15) !important;
+                border-radius: 10px !important;
+                padding: 10px 8px !important;
+                color: #FFFFFF !important;      /* 維持白色字體 */
+                box-shadow: 0 3px 6px rgba(0,0,0,0.1) !important; /* 陰影也稍微調淡 */
                 display: flex !important;
                 flex-direction: column !important;
                 align-items: center !important;
                 justify-content: center !important;
                 text-align: center !important;
                 margin: 0 !important;
-                border: 1px solid rgba(255,255,255,0.1) !important;
+                border: 1px solid rgba(255,255,255,0.2) !important; /* 邊框更輕柔 */
             }
 
-            /* 電腦版覆寫 (螢幕 > 768px) */
+            /* 電腦版覆寫 */
             @media (min-width: 768px) {
                 div.trend-scroll-box {
                     overflow-x: hidden !important;
@@ -1270,31 +1270,40 @@ def show_dashboard():
                 }
             }
 
-            /* 內容排版微調 (字體縮小) */
+            /* 內容排版 */
             .t-icon { 
-                font-size: 2.0rem !important; /* Icon 縮小 */
+                font-size: 2.0rem !important; 
                 margin-bottom: 5px !important; 
-                text-shadow: 0 1px 2px rgba(0,0,0,0.2); 
+                text-shadow: 0 1px 2px rgba(0,0,0,0.1); 
             }
             .t-title { 
-                font-size: 1.4rem !important; /* 標題縮小 */
+                font-size: 1.3rem !important; 
                 font-weight: 800 !important; 
                 margin-bottom: 5px !important; 
                 color: #FFFFFF !important;
-                text-shadow: 0 1px 2px rgba(0,0,0,0.2); 
+                text-shadow: 0 1px 2px rgba(0,0,0,0.1); 
                 line-height: 1.2 !important; 
             }
             .t-desc { 
-                font-size: 1.0rem !important; /* 描述文字縮小 */
+                font-size: 1.0rem !important; 
                 font-weight: 500 !important; 
                 line-height: 1.4 !important; 
                 color: rgba(255,255,255,0.95) !important; 
             }
             
-            /* 背景漸層定義 (還原原本的色調) */
-            .bg-strong-v198 { background: linear-gradient(135deg, #ff416c 50%, #ff4b2b 50%) !important; }
-            .bg-chaos-v198  { background: linear-gradient(135deg, #834d9b 50%, #d04ed6 50%) !important; }
-            .bg-weak-v198   { background: linear-gradient(135deg, #11998e 50%, #38ef7d 50%) !important; }
+            /* 【關鍵修改】背景漸層定義 (護眼柔和版) */
+            /* 紅色系：改為柔和珊瑚紅 -> 淺磚紅 */
+            .bg-strong-v199 { 
+                background: linear-gradient(135deg, #FF8A80 0%, #E57373 100%) !important; 
+            }
+            /* 紫色系：改為柔和薰衣草 -> 霧感紫 */
+            .bg-chaos-v199 { 
+                background: linear-gradient(135deg, #BA68C8 0%, #9575CD 100%) !important; 
+            }
+            /* 綠色系：改為清新薄荷 -> 鼠尾草綠 */
+            .bg-weak-v199 { 
+                background: linear-gradient(135deg, #81C784 0%, #4DB6AC 100%) !important; 
+            }
 
             /* 隱藏捲軸 */
             div.trend-scroll-box::-webkit-scrollbar { height: 4px; }
@@ -1302,25 +1311,25 @@ def show_dashboard():
         </style>
         """, unsafe_allow_html=True)
 
-        # 2. 組合 HTML (無縮排拼接)
+        # 2. 組合 HTML
         t_html = '<div class="trend-scroll-box">'
         
         # 卡片 1: 強風/亂流
-        t_html += '<div class="t-card bg-strong-v198">'
+        t_html += '<div class="t-card bg-strong-v199">'
         t_html += '<div class="t-icon">🔥</div>'
         t_html += '<div class="t-title">強風/亂流循環</div>'
         t_html += '<div class="t-desc">易漲行情<br>股價走勢有延續性<br>(打工/上班型)</div>'
         t_html += '</div>'
 
         # 卡片 2: 循環交界
-        t_html += '<div class="t-card bg-chaos-v198">'
+        t_html += '<div class="t-card bg-chaos-v199">'
         t_html += '<div class="t-icon">🌪️</div>'
         t_html += '<div class="t-title">循環的交界</div>'
         t_html += '<div class="t-desc">待觀察<br>行情無明確方向<br>(等方向出來再積極)</div>'
         t_html += '</div>'
 
         # 卡片 3: 陣風/無風
-        t_html += '<div class="t-card bg-weak-v198">'
+        t_html += '<div class="t-card bg-weak-v199">'
         t_html += '<div class="t-icon">🍃</div>'
         t_html += '<div class="t-title">陣風/無風循環</div>'
         t_html += '<div class="t-desc">易跌行情<br>股價走勢難延續<br>(老闆/成長型)</div>'
@@ -1848,5 +1857,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
