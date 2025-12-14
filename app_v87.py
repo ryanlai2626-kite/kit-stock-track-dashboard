@@ -1292,9 +1292,9 @@ def show_dashboard():
             }
             
             /* 背景漸層定義 (還原原本的色調) */
-            .bg-strong-v198 { background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%) !important; }
-            .bg-chaos-v198  { background: linear-gradient(135deg, #834d9b 0%, #d04ed6 100%) !important; }
-            .bg-weak-v198   { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%) !important; }
+            .bg-strong-v198 { background: linear-gradient(135deg, #ff416c 50%, #ff4b2b 50%) !important; }
+            .bg-chaos-v198  { background: linear-gradient(135deg, #834d9b 50%, #d04ed6 50%) !important; }
+            .bg-weak-v198   { background: linear-gradient(135deg, #11998e 50%, #38ef7d 50%) !important; }
 
             /* 隱藏捲軸 */
             div.trend-scroll-box::-webkit-scrollbar { height: 4px; }
@@ -1333,7 +1333,7 @@ def show_dashboard():
         
         # 3. 下方圖表 (保留)
         wind_order = ['強風', '亂流', '陣風', '無風'] 
-        wind_chart = alt.Chart(chart_df).mark_circle(size=200, opacity=0.9).encode(
+        wind_chart = alt.Chart(chart_df).mark_circle(size=350, opacity=0.9).encode(
             x=alt.X('date:O', title='日期', axis=axis_config), 
             y=alt.Y('wind:N', title='風度', sort=wind_order, axis=axis_config), 
             color=alt.Color('wind:N', title='狀態', legend=legend_config, 
@@ -1572,7 +1572,7 @@ def show_dashboard():
                 shapes.append(dict(type="rect", xref="x", yref="paper", x0=z['start'], x1=z['end'], y0=0, y1=1, fillcolor=color_map.get(z['type'], '#eee'), opacity=1, layer="below", line_width=0))
 
             if '收' in hist_df.columns:
-                fig.add_trace(go.Scatter(x=hist_df['日期'], y=hist_df['收'], mode='lines', name='加權指數', line=dict(color='#2c3e50', width=2.5)))
+                fig.add_trace(go.Scatter(x=hist_df['日期'], y=hist_df['收'], mode='lines', name='上櫃指數', line=dict(color='#2c3e50', width=2.5)))
 		
             if 'MA20' in hist_df.columns:
                 fig.add_trace(go.Scatter(x=hist_df['日期'], y=hist_df['MA20'], mode='lines', name='20MA', line=dict(color='#8e44ad', width=2, dash='dash')))
@@ -1848,4 +1848,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
