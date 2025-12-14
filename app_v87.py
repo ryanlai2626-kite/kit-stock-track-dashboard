@@ -1093,7 +1093,7 @@ def show_dashboard():
         with wc3: render_trend_card(wc3, "陣風/無風循環", "易跌行情<br>股價走勢難有延續性<br>(老闆/成長型)", "bg-weak", "🍃")
         
         wind_order = ['強風', '亂流', '陣風', '無風'] 
-        wind_chart = alt.Chart(chart_df).mark_circle(size=400, opacity=1).encode(x=alt.X('date:O', title='日期', axis=axis_config), y=alt.Y('wind:N', title='風度', sort=wind_order, axis=axis_config), color=alt.Color('wind:N', title='狀態', legend=legend_config, scale=alt.Scale(domain=['無風', '陣風', '亂流', '強風'], range=['#2ecc71', '#f1c40f', '#9b59b6', '#e74c3c'])), tooltip=['date', 'wind']).properties(height=400).configure(background='white').interactive()
+        wind_chart = alt.Chart(chart_df).mark_circle(size=300, opacity=1).encode(x=alt.X('date:O', title='日期', axis=axis_config), y=alt.Y('wind:N', title='風度', sort=wind_order, axis=axis_config), color=alt.Color('wind:N', title='狀態', legend=legend_config, scale=alt.Scale(domain=['無風', '陣風', '亂流', '強風'], range=['#2ecc71', '#f1c40f', '#9b59b6', '#e74c3c'])), tooltip=['date', 'wind']).properties(height=400).configure(background='white').interactive()
         st.altair_chart(wind_chart, use_container_width=True)
         
     with tab3:
@@ -1615,4 +1615,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
