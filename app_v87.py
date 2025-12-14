@@ -545,57 +545,76 @@ def render_global_markets():
     markets = get_global_market_data()
     
     if markets:
-        # 1. 定義 CSS (V191: 修正卡片高度不一，強制統一規格)
+        # 1. 定義 CSS (V192: 手機滑動 + 電腦滿版均分)
         st.markdown("""
         <style>
-            /* 容器：水平排列、可滑動 */
+            /* --- 基礎設定 (預設適用於手機/全裝置) --- */
+            
+            /* 容器：預設為水平排列、不換行、可滑動 */
             div.market-scroll-container {
                 display: flex !important;
                 flex-direction: row !important;
                 flex-wrap: nowrap !important;
                 overflow-x: auto !important;
-                /* 關鍵修正 1: 改為 stretch，讓所有卡片高度自動拉伸至一致 */
-                align-items: stretch !important; 
-                gap: 15px !important;
-                padding: 10px 5px 20px 5px !important; /* 增加底部 padding 避免陰影被切掉 */
+                align-items: stretch !important; /* 高度一致 */
+                gap: 12px !important;
+                padding: 5px 2px 15px 2px !important;
                 width: 100% !important;
                 -webkit-overflow-scrolling: touch;
             }
             
-            /* 卡片：固定寬度、彈性高度、內部排版 */
+            /* 卡片：預設為固定寬度 (手機才好滑) */
             div.market-scroll-container .market-card {
-                flex: 0 0 auto !important;
-                width: 170px !important;       /* 稍微加寬一點點以容納長數字 */
-                min-width: 170px !important;
-                min-height: 140px !important;  /* 關鍵修正 2: 設定最小高度，確保視覺一致 */
+                flex: 0 0 auto !important;     /* 手機版：禁止縮放 */
+                width: 160px !important;       /* 手機版：固定寬度 */
+                min-width: 160px !important;
+                min-height: 140px !important;
                 background-color: #FFFFFF !important;
-                border-radius: 12px !important;
+                border-radius: 10px !important;
                 padding: 15px !important;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.05) !important; /* 優化陰影質感 */
+                box-shadow: 0 2px 5px rgba(0,0,0,0.08) !important;
                 border: 1px solid #EAEAEA !important;
                 text-align: center !important;
                 margin: 0 !important;
                 
-                /* 關鍵修正 3: 卡片內部也用 Flex，確保內容垂直置中 */
+                /* 內部排版 */
                 display: flex !important;
                 flex-direction: column !important;
-                justify-content: center !important; /* 內容垂直置中 */
-                align-items: center !important;     /* 內容水平置中 */
+                justify-content: center !important;
+                align-items: center !important;
             }
 
-            /* 文字樣式微調 */
+            /* --- 💻 電腦版覆寫 (當螢幕寬度大於 768px 時觸發) --- */
+            @media (min-width: 768px) {
+                /* 容器：隱藏捲軸 (因為會滿版顯示，不需要捲動) */
+                div.market-scroll-container {
+                    overflow-x: hidden !important; 
+                    justify-content: space-between !important; /* 確保均分 */
+                }
+                
+                /* 卡片：改為彈性寬度 (Grow) */
+                div.market-scroll-container .market-card {
+                    flex: 1 1 0px !important;  /* 關鍵：讓所有卡片平分剩餘空間 */
+                    width: auto !important;    /* 解除固定寬度限制 */
+                    min-width: 0 !important;   /* 允許縮小以適應容器 */
+                    max-width: 100% !important;
+                }
+            }
+
+            /* --- 通用樣式 --- */
             .market-name { 
                 font-size: 1.0rem; 
                 font-weight: bold; 
                 color: #555; 
-                margin-bottom: 8px !important; /* 增加一點間距 */
-                white-space: nowrap !important; /* 防止標題換行破壞版面 */
+                margin-bottom: 8px !important;
+                white-space: nowrap !important; 
             }
             .market-price { 
-                font-size: 1.7rem; /* 稍微放大 */
+                font-size: 1.8rem; /* 電腦版空間大，字體可以大氣一點 */
                 font-weight: 900; 
                 margin: 0 0 8px 0 !important;
                 line-height: 1.2 !important;
+                white-space: nowrap !important;
             }
             .market-change { 
                 font-size: 1.0rem; 
@@ -603,7 +622,7 @@ def render_global_markets():
                 white-space: nowrap !important;
             }
             
-            /* 顏色與線條 */
+            /* 顏色定義 */
             .up-color { color: #e74c3c !important; }
             .down-color { color: #27ae60 !important; }
             .flat-color { color: #7f8c8d !important; }
@@ -612,18 +631,16 @@ def render_global_markets():
             .card-down { border-bottom: 5px solid #27ae60 !important; }
             .card-flat { border-bottom: 5px solid #95a5a6 !important; }
 
-            /* 捲軸樣式 */
+            /* 隱藏捲軸 */
             div.market-scroll-container::-webkit-scrollbar { height: 6px; }
-            div.market-scroll-container::-webkit-scrollbar-track { background: transparent; }
-            div.market-scroll-container::-webkit-scrollbar-thumb { background-color: #d1d5db; border-radius: 10px; }
+            div.market-scroll-container::-webkit-scrollbar-thumb { background-color: #e0e0e0; border-radius: 4px; }
         </style>
         """, unsafe_allow_html=True)
 
-        # 2. 組合 HTML (保持單行串接，避免縮排問題)
+        # 2. 組合 HTML (無縮排，確保安全)
         full_html = '<div class="market-scroll-container">'
         
         for m in markets:
-            # 確保內容安全渲染
             card_html = (
                 f'<div class="market-card {m["card_class"]}">'
                 f'<div class="market-name">{m["name"]}</div>'
@@ -640,40 +657,6 @@ def render_global_markets():
     
     else:
         st.info("⏳ 指數資料讀取中...")
-
-    st.divider()
-
-    # --- 下半部：恐懼貪婪 (保持不變) ---
-    fg_data = get_cnn_fear_greed_full()
-    
-    st.subheader("😱 恐懼與貪婪指數 (Fear & Greed Index)")
-
-    if fg_data and "error" in fg_data:
-        st.warning(f"⚠️ 無法取得 CNN 數據: {fg_data['error']}")
-    elif fg_data:
-        c1, c2 = st.columns([1, 1])
-        with c1:
-            st.plotly_chart(plot_fear_greed_gauge(fg_data['score']), use_container_width=True)
-            lbl, color = get_rating_label_cn(fg_data['score'])
-            st.markdown(f"<div style='text-align:center; font-weight:900; font-size:2.2rem; color:{color}; text-shadow: 1px 1px 2px rgba(0,0,0,0.2); margin-top: -10px;'>{lbl}</div>", unsafe_allow_html=True)
-        with c2:
-            st.markdown("#### 市場情緒變化趨勢")
-            # 簡化重複的 HTML 生成
-            rows_html = ""
-            def make_row(title, date, score):
-                l, c = get_rating_label_cn(score)
-                return f"<div class='fg-history-row'><div style='flex:2;'><b>{title}</b><br><small>{date}</small></div><div style='flex:1;text-align:right;'><span style='background:{c};color:#fff;padding:2px 5px;border-radius:3px;font-size:12px;'>{l}</span> <b style='font-size:18px;'>{score}</b></div></div>"
-            
-            rows_html += make_row("當日", fg_data['date'], fg_data['score'])
-            h = fg_data['history']
-            if h['prev']['score']: rows_html += make_row("前一交易日", h['prev']['date'], h['prev']['score'])
-            if h['week']['score']: rows_html += make_row("一週前", h['week']['date'], h['week']['score'])
-            if h['month']['score']: rows_html += make_row("一個月前", h['month']['date'], h['month']['score'])
-            if h['year']['score']: rows_html += make_row("一年前", h['year']['date'], h['year']['score'])
-            
-            st.markdown(rows_html, unsafe_allow_html=True)
-    else:
-        st.info("連線中...")
 
     st.divider()
 
@@ -1033,17 +1016,96 @@ def show_dashboard():
             
     st.divider()
 
-    c1, c2, c3, c4 = st.columns(4)
-    wind_status = day_data['wind']; wind_color = "#2ecc71"
+# --- V195: 每日風度與風箏數 (修復上方顏色條消失問題) ---
+    st.markdown("### 🌬️ 每日風度與風箏數")
+
+    # 1. 準備數據與邏輯
+    wind_status = day_data['wind']
     wind_streak = calculate_wind_streak(df, selected_date)
     streak_text = f"已持續 {wind_streak} 天"
+    
+    # 風向顏色判斷
+    wind_color = "#2ecc71" # 預設綠色 (無風)
     if "強" in str(wind_status): wind_color = "#e74c3c"
     elif "亂" in str(wind_status): wind_color = "#9b59b6"
     elif "陣" in str(wind_status): wind_color = "#f1c40f"
-    render_metric_card(c1, "今日風向", wind_status, wind_color, sub_value=streak_text)
-    render_metric_card(c2, "🪁 打工型風箏", day_data['part_time_count'], "#f39c12")
-    render_metric_card(c3, "💪 上班族強勢週", day_data['worker_strong_count'], "#3498db")
-    render_metric_card(c4, "📈 上班族週趨勢", day_data['worker_trend_count'], "#9b59b6")
+
+    # 2. 定義 CSS (維持 Grid 排版，微調邊框邏輯)
+    st.markdown("""
+    <style>
+        /* Grid 容器 */
+        div.metrics-grid {
+            display: grid !important;
+            grid-template-columns: repeat(2, 1fr) !important; /* 手機 2 欄 */
+            gap: 15px !important;
+            margin-bottom: 20px !important;
+            width: 100% !important;
+        }
+
+        /* 電腦版 4 欄 */
+        @media (min-width: 768px) {
+            div.metrics-grid {
+                grid-template-columns: repeat(4, 1fr) !important;
+            }
+        }
+
+        /* 卡片樣式 */
+        div.metrics-grid .metric-box {
+            background-color: #FFFFFF !important;
+            border-radius: 12px !important;
+            padding: 15px 10px !important;
+            text-align: center !important;
+            /* 這裡設定基礎邊框為灰色，但我們會用 inline style 覆蓋上方邊框 */
+            border: 1px solid #E0E0E0 !important; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05) !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+            align-items: center !important;
+            min-height: 120px !important;
+            margin: 0 !important;
+        }
+
+        .m-label { font-size: 1.1rem; color: #666; font-weight: 600; margin-bottom: 5px; }
+        .m-value { font-size: 2.5rem; font-weight: 800; color: #2c3e50; margin: 0; line-height: 1.2; }
+        .m-sub { font-size: 0.9rem; color: #888; font-weight: bold; margin-top: 5px; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # 3. 組合 HTML
+    # 關鍵修正：在 style 裡面加入 !important，確保顏色條不會被 CSS 覆蓋
+    
+    html_metrics = '<div class="metrics-grid">'
+    
+    # 3.1 今日風向 (動態顏色)
+    html_metrics += f'<div class="metric-box" style="border-top: 5px solid {wind_color} !important;">'
+    html_metrics += f'<div class="m-label">今日風向</div>'
+    html_metrics += f'<div class="m-value">{wind_status}</div>'
+    html_metrics += f'<div class="m-sub">{streak_text}</div>'
+    html_metrics += '</div>'
+
+    # 3.2 打工型風箏 (橘色)
+    html_metrics += '<div class="metric-box" style="border-top: 5px solid #f39c12 !important;">'
+    html_metrics += '<div class="m-label">🪁 打工型風箏</div>'
+    html_metrics += f'<div class="m-value">{day_data["part_time_count"]}</div>'
+    html_metrics += '</div>'
+
+    # 3.3 上班族強勢週 (藍色)
+    html_metrics += '<div class="metric-box" style="border-top: 5px solid #3498db !important;">'
+    html_metrics += '<div class="m-label">💪 上班族強勢週</div>'
+    html_metrics += f'<div class="m-value">{day_data["worker_strong_count"]}</div>'
+    html_metrics += '</div>'
+
+    # 3.4 上班族週趨勢 (紫色)
+    html_metrics += '<div class="metric-box" style="border-top: 5px solid #9b59b6 !important;">'
+    html_metrics += '<div class="m-label">📈 上班族週趨勢</div>'
+    html_metrics += f'<div class="m-value">{day_data["worker_trend_count"]}</div>'
+    html_metrics += '</div>'
+
+    html_metrics += '</div>'
+
+    # 4. 渲染
+    st.markdown(html_metrics, unsafe_allow_html=True)
 
     # 【V132】使用 render_stock_tags_v113 (名稱沒變，邏輯已優化)
     st.markdown('<div class="strategy-banner worker-banner"><p class="banner-text">👨‍💼 上班族策略 (Worker Strategy)</p></div>', unsafe_allow_html=True)
