@@ -1220,15 +1220,132 @@ def show_dashboard():
         st.plotly_chart(fig_line, use_container_width=True)
     
     with tab2:
-        # 【需求2】市場觀察趨勢定義美化 (縮小版)
+        # 【V198】市場觀察趨勢定義 (精緻縮小版 + 白色字體 + 響應式)
         st.markdown("#### 🌬️ 市場觀察趨勢定義")
-        wc1, wc2, wc3 = st.columns(3)
-        with wc1: render_trend_card(wc1, "強風/亂流循環", "易漲行情<br>股價走勢較有延續性<br>(打工/上班型)", "bg-strong", "🔥")
-        with wc2: render_trend_card(wc2, "循環的交界", "待觀察<br>行情沒有明確方向<br>(等方向出來再積極)", "bg-chaos", "🌪️")
-        with wc3: render_trend_card(wc3, "陣風/無風循環", "易跌行情<br>股價走勢難有延續性<br>(老闆/成長型)", "bg-weak", "🍃")
         
+        # 1. 定義 CSS (強制白色字體、縮小尺寸)
+        st.markdown("""
+        <style>
+            /* 容器：Flexbox 設定 */
+            div.trend-scroll-box {
+                display: flex !important;
+                flex-direction: row !important;
+                flex-wrap: nowrap !important;
+                overflow-x: auto !important;
+                gap: 10px !important;  /* 間距縮小 */
+                padding: 5px 2px 10px 2px !important;
+                width: 100% !important;
+                -webkit-overflow-scrolling: touch;
+                align-items: stretch !important;
+            }
+
+            /* 卡片基礎樣式 (縮小版) */
+            div.trend-scroll-box .t-card {
+                flex: 0 0 auto !important;
+                width: 160px !important;       /* 手機版寬度縮小 (原本240 -> 160) */
+                min-width: 160px !important;
+                border-radius: 10px !important; /* 圓角稍微縮小 */
+                padding: 10px 8px !important;   /* 內距縮小 */
+                color: #FFFFFF !important;      /* 關鍵：強制白色字體 */
+                box-shadow: 0 3px 6px rgba(0,0,0,0.15) !important;
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: center !important;
+                justify-content: center !important;
+                text-align: center !important;
+                margin: 0 !important;
+                border: 1px solid rgba(255,255,255,0.1) !important;
+            }
+
+            /* 電腦版覆寫 (螢幕 > 768px) */
+            @media (min-width: 768px) {
+                div.trend-scroll-box {
+                    overflow-x: hidden !important;
+                    justify-content: space-between !important;
+                }
+                div.trend-scroll-box .t-card {
+                    flex: 1 1 0px !important;
+                    width: auto !important;
+                    min-width: 0 !important;
+                }
+            }
+
+            /* 內容排版微調 (字體縮小) */
+            .t-icon { 
+                font-size: 1.8rem !important; /* Icon 縮小 */
+                margin-bottom: 5px !important; 
+                text-shadow: 0 1px 2px rgba(0,0,0,0.2); 
+            }
+            .t-title { 
+                font-size: 1.3rem !important; /* 標題縮小 */
+                font-weight: 800 !important; 
+                margin-bottom: 5px !important; 
+                color: #FFFFFF !important;
+                text-shadow: 0 1px 2px rgba(0,0,0,0.2); 
+                line-height: 1.2 !important; 
+            }
+            .t-desc { 
+                font-size: 0.95rem !important; /* 描述文字縮小 */
+                font-weight: 500 !important; 
+                line-height: 1.4 !important; 
+                color: rgba(255,255,255,0.95) !important; 
+            }
+            
+            /* 背景漸層定義 (還原原本的色調) */
+            .bg-strong-v198 { background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%) !important; }
+            .bg-chaos-v198  { background: linear-gradient(135deg, #834d9b 0%, #d04ed6 100%) !important; }
+            .bg-weak-v198   { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%) !important; }
+
+            /* 隱藏捲軸 */
+            div.trend-scroll-box::-webkit-scrollbar { height: 4px; }
+            div.trend-scroll-box::-webkit-scrollbar-thumb { background-color: #ccc; border-radius: 4px; }
+        </style>
+        """, unsafe_allow_html=True)
+
+        # 2. 組合 HTML (無縮排拼接)
+        t_html = '<div class="trend-scroll-box">'
+        
+        # 卡片 1: 強風/亂流
+        t_html += '<div class="t-card bg-strong-v198">'
+        t_html += '<div class="t-icon">🔥</div>'
+        t_html += '<div class="t-title">強風/亂流循環</div>'
+        t_html += '<div class="t-desc">易漲行情<br>股價走勢有延續性<br>(打工/上班型)</div>'
+        t_html += '</div>'
+
+        # 卡片 2: 循環交界
+        t_html += '<div class="t-card bg-chaos-v198">'
+        t_html += '<div class="t-icon">🌪️</div>'
+        t_html += '<div class="t-title">循環的交界</div>'
+        t_html += '<div class="t-desc">待觀察<br>行情無明確方向<br>(等方向出來再積極)</div>'
+        t_html += '</div>'
+
+        # 卡片 3: 陣風/無風
+        t_html += '<div class="t-card bg-weak-v198">'
+        t_html += '<div class="t-icon">🍃</div>'
+        t_html += '<div class="t-title">陣風/無風循環</div>'
+        t_html += '<div class="t-desc">易跌行情<br>股價走勢難延續<br>(老闆/成長型)</div>'
+        t_html += '</div>'
+
+        t_html += '</div>'
+
+        # 渲染 HTML
+        st.markdown(t_html, unsafe_allow_html=True)
+        
+        # 3. 下方圖表 (保留)
         wind_order = ['強風', '亂流', '陣風', '無風'] 
-        wind_chart = alt.Chart(chart_df).mark_circle(size=400, opacity=1).encode(x=alt.X('date:O', title='日期', axis=axis_config), y=alt.Y('wind:N', title='風度', sort=wind_order, axis=axis_config), color=alt.Color('wind:N', title='狀態', legend=legend_config, scale=alt.Scale(domain=['無風', '陣風', '亂流', '強風'], range=['#2ecc71', '#f1c40f', '#9b59b6', '#e74c3c'])), tooltip=['date', 'wind']).properties(height=400).configure(background='white').interactive()
+        wind_chart = alt.Chart(chart_df).mark_circle(size=200, opacity=0.9).encode(
+            x=alt.X('date:O', title='日期', axis=axis_config), 
+            y=alt.Y('wind:N', title='風度', sort=wind_order, axis=axis_config), 
+            color=alt.Color('wind:N', title='狀態', legend=legend_config, 
+                            scale=alt.Scale(domain=['無風', '陣風', '亂流', '強風'], 
+                                            range=['#2ecc71', '#f1c40f', '#9b59b6', '#e74c3c'])), 
+            tooltip=['date', 'wind']
+        ).properties(
+            height=350 
+        ).configure(
+            background='white'
+        ).interactive()
+        
         st.altair_chart(wind_chart, use_container_width=True)
         
     with tab3:
