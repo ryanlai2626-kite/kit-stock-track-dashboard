@@ -1438,7 +1438,7 @@ def show_dashboard():
             
             fig = go.Figure()
             # 背景色塊
-            color_map_cycle = {'active': 'rgba(231, 76, 60, 0.15)', 'passive': 'rgba(46, 204, 113, 0.15)', 'transition': 'rgba(241, 196, 15, 0.4)'}
+            color_map_cycle = {'active': 'rgba(231, 76, 60, 0.15)', 'passive': 'rgba(46, 204, 113, 0.15)', 'transition': 'rgba(150, 150, 150, 0.2)'}
             shapes = []
             for z in zones: 
                 shapes.append(dict(
@@ -1761,3 +1761,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
