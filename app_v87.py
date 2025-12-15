@@ -1291,7 +1291,7 @@ def show_dashboard():
         t_html = '<div class="trend-scroll-box"><div class="t-card bg-strong-v199"><div class="t-icon">🔥</div><div class="t-title">強風/亂流循環</div><div class="t-desc">易漲行情<br>股價走勢有延續性<br>(打工/上班型)</div></div><div class="t-card bg-chaos-v199"><div class="t-icon">🌪️</div><div class="t-title">循環的交界</div><div class="t-desc">待觀察<br>行情無明確方向<br>(等方向出來再積極)</div></div><div class="t-card bg-weak-v199"><div class="t-icon">🍃</div><div class="t-title">陣風/無風循環</div><div class="t-desc">易跌行情<br>股價走勢難延續<br>(老闆/成長型)</div></div></div>'
         st.markdown(t_html, unsafe_allow_html=True)
         wind_order = ['強風', '亂流', '陣風', '無風'] 
-        wind_chart = alt.Chart(chart_df).mark_circle(size=350, opacity=0.9).encode(x=alt.X('date:O', title='日期', axis=axis_config_alt), y=alt.Y('wind:N', title='風度', sort=wind_order, axis=axis_config_alt), color=alt.Color('wind:N', title='狀態', legend=legend_config_alt, scale=alt.Scale(domain=['無風', '陣風', '亂流', '強風'], range=['#2ecc71', '#f1c40f', '#9b59b6', '#e74c3c'])), tooltip=['date', 'wind']).properties(height=350, width='container').configure(background='white').interactive()
+        wind_chart = alt.Chart(chart_df).mark_circle(size=450, opacity=0.9).encode(x=alt.X('date:O', title='日期', axis=axis_config_alt), y=alt.Y('wind:N', title='風度', sort=wind_order, axis=axis_config_alt), color=alt.Color('wind:N', title='狀態', legend=legend_config_alt, scale=alt.Scale(domain=['無風', '陣風', '亂流', '強風'], range=['#2ecc71', '#f1c40f', '#9b59b6', '#e74c3c'])), tooltip=['date', 'wind']).properties(height=350, width='container').configure(background='white').interactive()
         st.altair_chart(wind_chart, use_container_width=True)
         
     # Tab 5: 每月風度統計
@@ -1761,4 +1761,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
