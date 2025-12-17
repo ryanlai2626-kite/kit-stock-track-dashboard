@@ -454,6 +454,53 @@ def plot_sparkline(data_list, color_hex):
     return fig
 
 
+# --- 1. SVG 繪圖函式 (修正版：增加尺寸限制) ---
+def make_sparkline_svg(data_list, color_hex, width=200, height=50):
+    if not data_list or len(data_list) < 2: return ""
+    
+    # 過濾空值
+    valid_data = [x for x in data_list if pd.notna(x)]
+    if len(valid_data) < 2: return ""
+    
+    min_val, max_val = min(valid_data), max(valid_data)
+    rng = max_val - min_val
+    if rng == 0: rng = 1 
+    
+    points = []
+    # 內縮邊距，防止線條切邊
+    draw_height = height - 10 
+    margin_top = 5
+    
+    step = width / (len(valid_data) - 1)
+    
+    for i, val in enumerate(valid_data):
+        x = i * step
+        y = height - margin_top - ((val - min_val) / rng * draw_height)
+        points.append(f"{x:.1f},{y:.1f}")
+        
+    polyline_points = " ".join(points)
+    
+    hex_color = color_hex.lstrip('#')
+    r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    
+    fill_color = f"rgba({r},{g},{b},0.15)"
+    stroke_color = f"rgba({r},{g},{b},1)"
+    
+    path_d = f"M {points[0]} L {polyline_points} L {width},{height} L 0,{height} Z"
+    
+    # 關鍵修正：直接在 SVG 標籤內寫死 style，不依賴外部 CSS
+    svg = f"""
+    <svg viewBox="0 0 {width} {height}" preserveAspectRatio="none" 
+         style="width:100%; height:{height}px; display:block; overflow:hidden;">
+        <path d="{path_d}" fill="{fill_color}" stroke="none" />
+        <polyline points="{polyline_points}" fill="none" stroke="{stroke_color}" 
+                  stroke-width="2" vector-effect="non-scaling-stroke" 
+                  stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    """
+    return svg
+
+
 # --- 全球市場即時報價 (含走勢圖數據版) ---
 @st.cache_data(ttl=60) # 因為抓歷史數據較慢，建議快取時間設 60秒
 def get_global_market_data_with_chart():
@@ -622,137 +669,66 @@ def plot_fear_greed_gauge(score):
     fig.update_layout(height=300, margin=dict(l=20, r=20, t=40, b=20), paper_bgcolor='rgba(0,0,0,0)', font={'family': "Arial"})
     return fig
 
+import textwrap # 務必確認有匯入這個標準函式庫
+
+# --- 2. 渲染函式 (防呆修正版：解決縮排導致的黑框問題) ---
 def render_global_markets():
     st.markdown("### 🌏 全球指數與加密貨幣 (Real-time Trend)")
     
     markets = get_global_market_data_with_chart()
     
-    if markets:
-        # --- 專業版面 CSS 設計 ---
-        st.markdown("""
-        <style>
-            /* 卡片容器：白色背景、圓角、陰影、懸停效果 */
-            .market-card-pro {
-                background-color: #FFFFFF;
-                border-radius: 16px;          /* 更圓潤的邊角 */
-                padding: 15px 15px 0px 15px;  /* 底部 padding 為 0，讓圖表貼底 */
-                box-shadow: 0 4px 12px rgba(0,0,0,0.05); /* 柔和陰影 */
-                border: 1px solid #F0F2F6;
-                transition: transform 0.2s ease, box-shadow 0.2s ease;
-                height: 100%;
-                display: flex;
-                flex-direction: column;
-                justify-content: space-between;
-                overflow: hidden; /* 確保圖表不會溢出圓角 */
-            }
-            
-            .market-card-pro:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 8px 16px rgba(0,0,0,0.1);
-            }
-
-            /* 標題區：左對齊，深灰色 */
-            .mc-header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 5px;
-            }
-            .mc-name { 
-                font-size: 0.95rem; 
-                color: #555; 
-                font-weight: 700; 
-                letter-spacing: 0.5px;
-            }
-            .mc-market-badge {
-                font-size: 0.7rem;
-                padding: 2px 6px;
-                background-color: #f1f3f4;
-                border-radius: 4px;
-                color: #666;
-            }
-
-            /* 數據區：價格放大 */
-            .mc-price-box {
-                text-align: left; /* 靠左對齊更像專業報表 */
-            }
-            .mc-price { 
-                font-size: 1.8rem; 
-                font-weight: 800; 
-                color: #1a1a1a; 
-                line-height: 1.1; 
-                font-family: 'Roboto', sans-serif;
-                margin: 5px 0;
-            }
-            
-            /* 漲跌幅：更精緻的標籤 */
-            .mc-change { 
-                font-size: 0.9rem; 
-                font-weight: 600; 
-                display: inline-block;
-            }
-            .up-text { color: #e74c3c; }
-            .down-text { color: #27ae60; }
-            .flat-text { color: #95a5a6; }
-            
-            /* 分隔與版面 */
-            .chart-container {
-                margin-top: 5px;
-                margin-left: -15px;  /* 抵消 padding，讓圖表滿版 */
-                margin-right: -15px; /* 抵消 padding */
-                margin-bottom: -5px; /* 微調底部 */
-            }
-        </style>
-        """, unsafe_allow_html=True)
-
-        cols_per_row = 4 
-        
-        for i in range(0, len(markets), cols_per_row):
-            cols = st.columns(cols_per_row)
-            batch_markets = markets[i:i+cols_per_row]
-            
-            for idx, m in enumerate(batch_markets):
-                with cols[idx]:
-                    # 1. 卡片上半部 (HTML 文字區)
-                    # 判斷箭頭符號
-                    arrow = "▲" if m['change'] > 0 else ("▼" if m['change'] < 0 else "-")
-                    text_color = "up-text" if m['change'] > 0 else ("down-text" if m['change'] < 0 else "flat-text")
-                    
-                    # 取得國旗或分類標籤 (簡單處理 name 字串)
-                    # 假設 name 是 "🇺🇸 道瓊工業"，我們可以用 split 稍微分一下，或直接顯示
-                    badge = m['name'].split(' ')[0] if ' ' in m['name'] else 'MK'
-                    clean_name = ' '.join(m['name'].split(' ')[1:]) if ' ' in m['name'] else m['name']
-
-                    st.markdown(f"""
-                    <div class="market-card-pro">
-                        <div>
-                            <div class="mc-header">
-                                <span class="mc-name">{clean_name}</span>
-                                <span class="mc-market-badge">{badge}</span>
-                            </div>
-                            <div class="mc-price-box">
-                                <div class="mc-price">{m['price']}</div>
-                                <div class="mc-change {text_color}">
-                                    {arrow} {abs(m['change']):.2f} ({abs(m['pct_change']):.2f}%)
-                                </div>
-                            </div>
-                        </div>
-                        </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # 2. 卡片下半部 (圖表區)
-                    # 這裡使用 CSS margin hack 將圖表 "推" 進上面的 div 視覺範圍內
-                    # 但因為 Streamlit 機制限制，最好的方法是讓圖表緊接在後，看起來像一體
-                    
-                    fig = plot_sparkline(m['trend'], m['color_hex'])
-                    if fig:
-                        # 負的 margin-top 是為了讓圖表向上移動，無縫接軌 HTML 卡片底部
-                        st.markdown('<div class="chart-container" style="margin-top: -65px; position: relative; z-index: 1; pointer-events: none;">', unsafe_allow_html=True) 
-                        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'staticPlot': True})
-                        st.markdown('</div>', unsafe_allow_html=True)
-                    
-    else:
+    if not markets:
         st.info("⏳ 市場資料讀取中...")
+        st.divider()
+        return
+
+    # --- 1. 定義 CSS (壓縮為單行字串) ---
+    # 這樣做是為了防止 Python 多行字串的縮排被 Markdown 誤讀
+    css_styles = """
+    <style>
+        .market-dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 15px; width: 100%; margin-bottom: 20px; }
+        .market-card-item { background-color: #FFFFFF !important; border: 1px solid #E5E7EB; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; flex-direction: column; justify-content: space-between; height: 140px; overflow: hidden; }
+        .card-content-top { padding: 15px 15px 5px 15px; flex-grow: 1; }
+        .card-header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+        .card-title-text { font-size: 0.95rem; font-weight: 700; color: #4B5563; }
+        .card-badge-box { font-size: 0.75rem; background: #F3F4F6; padding: 2px 8px; border-radius: 999px; color: #6B7280; }
+        .card-price-num { font-size: 1.6rem; font-weight: 800; color: #111827; line-height: 1.1; font-family: sans-serif; }
+        .card-price-chg { font-size: 0.85rem; font-weight: 600; margin-top: 2px; }
+        .color-up { color: #DC2626 !important; }
+        .color-down { color: #059669 !important; }
+        .color-flat { color: #6B7280 !important; }
+        .card-chart-bottom { height: 50px; width: 100%; margin-bottom: -1px; opacity: 0.95; overflow: hidden; }
+        @media (max-width: 600px) { .market-dashboard-grid { grid-template-columns: 1fr !important; } }
+    </style>
+    """
+
+    # --- 2. 建立卡片 HTML (使用 List 收集，最後合併) ---
+    cards_list = []
+    for m in markets:
+        svg_chart = make_sparkline_svg(m['trend'], m['color_hex'], height=50)
+        
+        if m['change'] > 0:
+            arrow = "▲"; color_cls = "color-up"
+        elif m['change'] < 0:
+            arrow = "▼"; color_cls = "color-down"
+        else:
+            arrow = "-"; color_cls = "color-flat"
+        
+        badge = m['name'].split(' ')[0] if ' ' in m['name'] else 'MK'
+        clean_name = ' '.join(m['name'].split(' ')[1:]) if ' ' in m['name'] else m['name']
+        
+        # 這裡將每個卡片的 HTML 寫成一行，避免縮排問題
+        card_html = f'<div class="market-card-item"><div class="card-content-top"><div class="card-header-flex"><span class="card-title-text">{clean_name}</span><span class="card-badge-box">{badge}</span></div><div class="card-price-flex"><div class="card-price-num">{m["price"]}</div><div class="card-price-chg {color_cls}">{arrow} {abs(m["change"]):.2f} ({abs(m["pct_change"]):.2f}%)</div></div></div><div class="card-chart-bottom">{svg_chart}</div></div>'
+        cards_list.append(card_html)
+
+    # --- 3. 組合最終 HTML ---
+    # 將所有卡片接起來，並包在容器內
+    all_cards_str = "".join(cards_list)
+    final_html = f'<div class="market-dashboard-grid">{all_cards_str}</div>'
+
+    # --- 4. 輸出 (分開輸出 CSS 和 HTML，確保安全) ---
+    st.markdown(css_styles, unsafe_allow_html=True)
+    st.markdown(final_html, unsafe_allow_html=True)
     
     st.divider()
 
