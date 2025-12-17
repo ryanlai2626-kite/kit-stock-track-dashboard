@@ -458,7 +458,6 @@ def plot_sparkline(data_list, color_hex):
 def make_sparkline_svg(data_list, color_hex, width=200, height=50):
     if not data_list or len(data_list) < 2: return ""
     
-    # 過濾空值
     valid_data = [x for x in data_list if pd.notna(x)]
     if len(valid_data) < 2: return ""
     
@@ -467,15 +466,19 @@ def make_sparkline_svg(data_list, color_hex, width=200, height=50):
     if rng == 0: rng = 1 
     
     points = []
-    # 內縮邊距，防止線條切邊
-    draw_height = height - 10 
+    
+    # --- 優化 1：調整繪圖邊距 ---
+    # 上方留 5px，下方留 5px，確保線條粗細不會被切掉
     margin_top = 5
+    margin_bottom = 5
+    draw_height = height - margin_top - margin_bottom 
     
     step = width / (len(valid_data) - 1)
     
     for i, val in enumerate(valid_data):
         x = i * step
-        y = height - margin_top - ((val - min_val) / rng * draw_height)
+        # 座標計算：包含底部邊距
+        y = height - margin_bottom - ((val - min_val) / rng * draw_height)
         points.append(f"{x:.1f},{y:.1f}")
         
     polyline_points = " ".join(points)
@@ -486,19 +489,10 @@ def make_sparkline_svg(data_list, color_hex, width=200, height=50):
     fill_color = f"rgba({r},{g},{b},0.15)"
     stroke_color = f"rgba({r},{g},{b},1)"
     
+    # 填色路徑需要延伸到最底端 (height)，這樣漸層才好看
     path_d = f"M {points[0]} L {polyline_points} L {width},{height} L 0,{height} Z"
     
-    # 關鍵修正：直接在 SVG 標籤內寫死 style，不依賴外部 CSS
-    svg = f"""
-    <svg viewBox="0 0 {width} {height}" preserveAspectRatio="none" 
-         style="width:100%; height:{height}px; display:block; overflow:hidden;">
-        <path d="{path_d}" fill="{fill_color}" stroke="none" />
-        <polyline points="{polyline_points}" fill="none" stroke="{stroke_color}" 
-                  stroke-width="2" vector-effect="non-scaling-stroke" 
-                  stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-    """
-    return svg
+    return f'<svg viewBox="0 0 {width} {height}" preserveAspectRatio="none" style="width:100%; height:{height}px; display:block; overflow:hidden;"><path d="{path_d}" fill="{fill_color}" stroke="none" /><polyline points="{polyline_points}" fill="none" stroke="{stroke_color}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 
 
 # --- 全球市場即時報價 (含走勢圖數據版) ---
@@ -682,27 +676,7 @@ def render_global_markets():
         st.divider()
         return
 
-    # --- 1. 定義 CSS (壓縮為單行字串) ---
-    # 這樣做是為了防止 Python 多行字串的縮排被 Markdown 誤讀
-    css_styles = """
-    <style>
-        .market-dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 15px; width: 100%; margin-bottom: 20px; }
-        .market-card-item { background-color: #FFFFFF !important; border: 1px solid #E5E7EB; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; flex-direction: column; justify-content: space-between; height: 140px; overflow: hidden; }
-        .card-content-top { padding: 15px 15px 5px 15px; flex-grow: 1; }
-        .card-header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
-        .card-title-text { font-size: 0.95rem; font-weight: 700; color: #4B5563; }
-        .card-badge-box { font-size: 0.75rem; background: #F3F4F6; padding: 2px 8px; border-radius: 999px; color: #6B7280; }
-        .card-price-num { font-size: 1.6rem; font-weight: 800; color: #111827; line-height: 1.1; font-family: sans-serif; }
-        .card-price-chg { font-size: 0.85rem; font-weight: 600; margin-top: 2px; }
-        .color-up { color: #DC2626 !important; }
-        .color-down { color: #059669 !important; }
-        .color-flat { color: #6B7280 !important; }
-        .card-chart-bottom { height: 50px; width: 100%; margin-bottom: -1px; opacity: 0.95; overflow: hidden; }
-        @media (max-width: 600px) { .market-dashboard-grid { grid-template-columns: 1fr !important; } }
-    </style>
-    """
-
-    # --- 2. 建立卡片 HTML (使用 List 收集，最後合併) ---
+    # --- 1. 產生卡片 HTML ---
     cards_list = []
     for m in markets:
         svg_chart = make_sparkline_svg(m['trend'], m['color_hex'], height=50)
@@ -717,16 +691,80 @@ def render_global_markets():
         badge = m['name'].split(' ')[0] if ' ' in m['name'] else 'MK'
         clean_name = ' '.join(m['name'].split(' ')[1:]) if ' ' in m['name'] else m['name']
         
-        # 這裡將每個卡片的 HTML 寫成一行，避免縮排問題
+        # 單行 HTML
         card_html = f'<div class="market-card-item"><div class="card-content-top"><div class="card-header-flex"><span class="card-title-text">{clean_name}</span><span class="card-badge-box">{badge}</span></div><div class="card-price-flex"><div class="card-price-num">{m["price"]}</div><div class="card-price-chg {color_cls}">{arrow} {abs(m["change"]):.2f} ({abs(m["pct_change"]):.2f}%)</div></div></div><div class="card-chart-bottom">{svg_chart}</div></div>'
         cards_list.append(card_html)
 
-    # --- 3. 組合最終 HTML ---
-    # 將所有卡片接起來，並包在容器內
     all_cards_str = "".join(cards_list)
+
+    # --- 2. CSS 樣式 (優化版) ---
+    css_styles = """
+    <style>
+        /* --- 電腦版佈局 (Grid) --- */
+        .market-dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 15px;
+            width: 100%;
+            margin-bottom: 20px;
+            padding: 5px; /* 增加一點內距避免陰影被切 */
+        }
+        
+        /* 卡片基礎樣式 */
+        .market-card-item {
+            background-color: #FFFFFF !important;
+            border: 1px solid #E5E7EB;
+            border-radius: 12px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 140px;
+            overflow: hidden;
+            flex-shrink: 0; /* 防止在 Flex 模式下被壓縮 */
+        }
+        
+        /* --- 優化 2：手機版佈局 (橫向滑動/Carousel) --- */
+        @media (max-width: 768px) {
+            .market-dashboard-grid {
+                display: flex !important;       /* 改為彈性盒子 */
+                overflow-x: auto !important;    /* 開啟水平捲動 */
+                grid-template-columns: none !important; /* 取消 Grid */
+                flex-wrap: nowrap !important;   /* 禁止換行 */
+                gap: 12px;
+                padding-bottom: 10px; /* 預留底部空間給滑動條或手指 */
+                -webkit-overflow-scrolling: touch; /* iOS 滑動優化 */
+                
+                /* 隱藏捲軸但保留功能 (針對 Chrome/Safari) */
+                scrollbar-width: none; /* Firefox */
+                -ms-overflow-style: none;  /* IE 10+ */
+            }
+            .market-dashboard-grid::-webkit-scrollbar { 
+                display: none; /* Chrome/Safari/Webkit */
+            }
+            
+            .market-card-item {
+                width: 200px !important;    /* 手機上固定寬度 */
+                min-width: 200px !important; 
+            }
+        }
+
+        /* 文字與排版樣式 (保持不變) */
+        .card-content-top { padding: 15px 15px 5px 15px; flex-grow: 1; }
+        .card-header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+        .card-title-text { font-size: 0.95rem; font-weight: 700; color: #4B5563; }
+        .card-badge-box { font-size: 0.75rem; background: #F3F4F6; padding: 2px 8px; border-radius: 999px; color: #6B7280; }
+        .card-price-num { font-size: 1.6rem; font-weight: 800; color: #111827; line-height: 1.1; font-family: sans-serif; }
+        .card-price-chg { font-size: 0.85rem; font-weight: 600; margin-top: 2px; }
+        .color-up { color: #DC2626 !important; }
+        .color-down { color: #059669 !important; }
+        .color-flat { color: #6B7280 !important; }
+        .card-chart-bottom { height: 50px; width: 100%; margin-bottom: -1px; opacity: 0.95; overflow: hidden; }
+    </style>
+    """
+
     final_html = f'<div class="market-dashboard-grid">{all_cards_str}</div>'
 
-    # --- 4. 輸出 (分開輸出 CSS 和 HTML，確保安全) ---
     st.markdown(css_styles, unsafe_allow_html=True)
     st.markdown(final_html, unsafe_allow_html=True)
     
