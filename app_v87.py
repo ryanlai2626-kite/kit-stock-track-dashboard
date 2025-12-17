@@ -396,41 +396,60 @@ def prefetch_turnover_data(stock_list_str, target_date, manual_override_json=Non
         return result_map
 
 
-# --- 繪製極簡走勢圖 (Sparkline) ---
+# --- 修正後的繪圖函式：加入數據正規化 ---
 def plot_sparkline(data_list, color_hex):
+    # 1. 基礎防呆：如果資料不足，回傳 None
     if not data_list or len(data_list) < 2:
         return None
     
-    x_data = list(range(len(data_list)))
+    # 過濾掉可能的 NaN 值 (yfinance 有時會有空值)
+    valid_data = [x for x in data_list if pd.notna(x)]
+    if len(valid_data) < 2: return None
+
+    # 2. 計算最大最小值
+    min_val = min(valid_data)
+    max_val = max(valid_data)
+    range_val = max_val - min_val
     
-    # 將 Hex 顏色轉為 RGB 以設定透明度
-    # 例如 #e74c3c -> rgba(231, 76, 60, 0.1)
+    # 3. 數據正規化 (Normalization) - 關鍵步驟！
+    # 將股價縮放到 0.1 ~ 1.0 的區間，讓波動佔滿整個畫布
+    # 底部留 0.1 (10%) 的緩衝，避免線條貼底不好看
+    if range_val == 0:
+        # 如果完全沒波動 (死魚盤)，畫一條中間的線
+        normalized_data = [0.5] * len(valid_data)
+    else:
+        normalized_data = [0.1 + (x - min_val) / range_val * 0.9 for x in valid_data]
+
+    x_data = list(range(len(normalized_data)))
+    
+    # 4. 顏色處理 (轉為 RGBA 設定透明度)
     hex_color = color_hex.lstrip('#')
     rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-    fill_color = f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, 0.1)" # 10% 透明度背景
+    fill_color = f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, 0.15)" # 背景填色 (淺)
+    line_color = f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, 1.0)"  # 線條顏色 (深)
     
     fig = go.Figure()
     
     fig.add_trace(go.Scatter(
         x=x_data, 
-        y=data_list, 
+        y=normalized_data, # 使用正規化後的數據
         mode='lines', 
-        fill='tozeroy',       # 填充至底部
-        fillcolor=fill_color, # 設定填充顏色
-        line=dict(color=color_hex, width=2.5, shape='spline', smoothing=1.3), # 加粗線條並平滑化
-        hoverinfo='y'
+        fill='tozeroy',       
+        fillcolor=fill_color, 
+        line=dict(color=line_color, width=2.5, shape='spline', smoothing=0.5), # 線條加粗
+        hoverinfo='skip' # 隱藏數值 (因為是正規化過的，顯示也沒意義)
     ))
     
-    # 極簡化版面設定
+    # 5. 極簡化版面設定
     fig.update_layout(
         showlegend=False,
-        margin=dict(l=0, r=0, t=10, b=0), # 上方留一點空間，底部貼齊
-        height=60,  # 稍微加高一點
+        margin=dict(l=0, r=0, t=5, b=0), # 邊界縮到最小，t=5 留一點頭部空間
+        height=50,  # 設定高度
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
-        xaxis=dict(visible=False, showgrid=False), # 隱藏 X 軸
-        yaxis=dict(visible=False, showgrid=False), # 隱藏 Y 軸
-        hovermode="x unified"
+        xaxis=dict(visible=False, showgrid=False, range=[0, len(valid_data)-1]), 
+        yaxis=dict(visible=False, showgrid=False, range=[0, 1.1]), # 固定 Y 軸範圍 0~1.1
+        hovermode=False 
     )
     return fig
 
@@ -485,7 +504,7 @@ def get_global_market_data_with_chart():
                     color_class = "up-color" if change > 0 else ("down-color" if change < 0 else "flat-color")
                     
                     # 取出走勢數據 (List)
-                    trend_data = hist['Close'].tolist()
+                    trend_data = hist['Close'].dropna().tolist()
 
                     market_data.append({
                         "name": name, 
