@@ -467,17 +467,16 @@ def make_sparkline_svg(data_list, color_hex, width=200, height=50):
     
     points = []
     
-    # --- 優化 1：調整繪圖邊距 ---
-    # 上方留 5px，下方留 5px，確保線條粗細不會被切掉
+    # --- 優化：增加上下邊距，防止線條切邊 ---
     margin_top = 5
-    margin_bottom = 5
+    margin_bottom = 12 # 加大底部空間，讓線條完整顯示
     draw_height = height - margin_top - margin_bottom 
     
     step = width / (len(valid_data) - 1)
     
     for i, val in enumerate(valid_data):
         x = i * step
-        # 座標計算：包含底部邊距
+        # 座標計算
         y = height - margin_bottom - ((val - min_val) / rng * draw_height)
         points.append(f"{x:.1f},{y:.1f}")
         
@@ -489,14 +488,14 @@ def make_sparkline_svg(data_list, color_hex, width=200, height=50):
     fill_color = f"rgba({r},{g},{b},0.15)"
     stroke_color = f"rgba({r},{g},{b},1)"
     
-    # 填色路徑需要延伸到最底端 (height)，這樣漸層才好看
+    # 填色路徑：延伸到最底端
     path_d = f"M {points[0]} L {polyline_points} L {width},{height} L 0,{height} Z"
     
     return f'<svg viewBox="0 0 {width} {height}" preserveAspectRatio="none" style="width:100%; height:{height}px; display:block; overflow:hidden;"><path d="{path_d}" fill="{fill_color}" stroke="none" /><polyline points="{polyline_points}" fill="none" stroke="{stroke_color}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 
 
-# --- 全球市場即時報價 (含走勢圖數據版) ---
-@st.cache_data(ttl=60) # 因為抓歷史數據較慢，建議快取時間設 60秒
+# --- 全球市場即時報價 (V166: 強制校正數據版) ---
+@st.cache_data(ttl=30) # 縮短快取時間以獲得更即時數據
 def get_global_market_data_with_chart():
     try:
         indices = {
@@ -511,51 +510,64 @@ def get_global_market_data_with_chart():
         }
         market_data = []
         
-        # 為了加速，我們可以嘗試用批次下載，但為了保持你的邏輯穩健，維持迴圈處理
         for ticker_code, name in indices.items():
             try:
                 stock = yf.Ticker(ticker_code)
                 
-                # 關鍵修改：抓取 1 天內，每 15-30 分鐘的資料 (才有走勢)
-                # crypto 24hr 交易，用 1d/15m；股市有開盤時間限制
-                interval = "15m" if "-USD" in ticker_code else "30m"
-                hist = stock.history(period="1d", interval=interval)
+                # 1. 抓取走勢圖數據 (當日分時)
+                # 加密貨幣用 15m，股市用 5m 或 15m (避免 1m 有時抓不到)
+                interval = "15m" if "-USD" in ticker_code else "5m"
+                hist_intra = stock.history(period="1d", interval=interval)
                 
-                if hist.empty:
-                    # 如果因為休市抓不到當日，改抓 5 天日線作為備案
-                    hist = stock.history(period="5d")
+                # 如果當日沒資料(剛開盤或休市)，抓 5 天資料來補圖
+                if hist_intra.empty:
+                    hist_intra = stock.history(period="5d", interval="60m")
                 
-                if not hist.empty and len(hist) >= 1:
-                    last_price = float(hist.iloc[-1]['Close'])
-                    
-                    # 取得前日收盤 (用來算漲跌)
-                    try:
-                        # 嘗試用 fast_info 拿昨收
-                        prev_close = stock.fast_info['previous_close']
-                    except:
-                        # 拿不到就用歷史資料的第一筆近似
-                        prev_close = float(hist.iloc[0]['Open'])
+                trend_data = hist_intra['Close'].dropna().tolist()
 
-                    if prev_close is None: prev_close = last_price
+                # 2. 抓取精確價格 (核心修正)
+                last_price = None
+                prev_close = None
+                
+                # A. 優先嘗試 fast_info (通常最準)
+                try:
+                    fi = stock.fast_info
+                    last_price = fi.last_price
+                    prev_close = fi.previous_close
+                except: pass
 
-                    change = last_price - prev_close
-                    pct_change = (change / prev_close) * 100
-                    
-                    color_hex = "#e74c3c" if change > 0 else ("#27ae60" if change < 0 else "#95a5a6")
-                    color_class = "up-color" if change > 0 else ("down-color" if change < 0 else "flat-color")
-                    
-                    # 取出走勢數據 (List)
-                    trend_data = hist['Close'].dropna().tolist()
+                # B. 針對台股或獲取失敗時的備援邏輯
+                if last_price is None or prev_close is None:
+                    # 抓 5 日日線，確保能找到"昨天"
+                    hist_daily = stock.history(period="5d")
+                    if not hist_daily.empty and len(hist_daily) >= 2:
+                        # 最新價優先用分時圖的最後一筆 (比較即時)
+                        if not hist_intra.empty:
+                            last_price = float(hist_intra.iloc[-1]['Close'])
+                        else:
+                            last_price = float(hist_daily.iloc[-1]['Close'])
+                        
+                        # 昨日收盤價：取倒數第二筆 (Yesterday Close)
+                        # 注意：不能用 iloc[0]['Open']，那是完全錯誤的
+                        prev_close = float(hist_daily.iloc[-2]['Close'])
 
-                    market_data.append({
-                        "name": name, 
-                        "price": f"{last_price:,.2f}", 
-                        "change": change, 
-                        "pct_change": pct_change, 
-                        "color_class": color_class,
-                        "color_hex": color_hex, # 給圖表用的顏色碼
-                        "trend": trend_data     # 走勢數據
-                    })
+                # 3. 如果還是都沒有，跳過
+                if last_price is None or prev_close is None: continue
+
+                # 4. 計算漲跌
+                change = last_price - prev_close
+                pct_change = (change / prev_close) * 100
+                
+                color_hex = "#DC2626" if change > 0 else ("#059669" if change < 0 else "#6B7280")
+                
+                market_data.append({
+                    "name": name, 
+                    "price": f"{last_price:,.2f}", 
+                    "change": change, 
+                    "pct_change": pct_change, 
+                    "color_hex": color_hex,
+                    "trend": trend_data
+                })
             except Exception as e:
                 print(f"Error {ticker_code}: {e}")
                 continue
