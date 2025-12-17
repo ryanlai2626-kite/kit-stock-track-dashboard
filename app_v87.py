@@ -172,6 +172,7 @@ MASTER_STOCK_DB = {
     "1560": ("中砂", "再生晶圓/鑽石碟"), 
     "3551": ("世禾", "半導體設備"), "3715": ("定穎投控", "PCB"),
     "2404": ("漢唐", "無塵室/廠務"), "3402": ("漢科", "廠務設備"),
+    "2887": ("台新新光", "金融"), "6830": ("汎銓", "電子上游IC"),
     
     # 權值/熱門 (上市)
     "2330": ("台積電", "晶圓代工"), "2317": ("鴻海", "AI伺服器組裝代工"), "2454": ("聯發科", "IC設計"), 
@@ -205,6 +206,8 @@ MASTER_STOCK_DB = {
     "3357": ("臺慶科", "被動元件"), "6667": ("信紘科", "廠務設備"), "2404": ("漢唐", "無塵室/廠務"),
     "6691": ("洋基工程", "廠務工程"), "1802": ("台玻", "玻璃"), "3529": ("力旺", "IP矽智財"),
     "3105": ("穩懋", "砷化鎵"), "5347": ("世界", "晶圓代工"), "5269": ("祥碩", "IC設計"),
+    "2887": ("台新新光", "金融"), "6830": ("汎銓", "電子上游IC"),
+
     
     # 權值/熱門 (上櫃)
     "8299": ("群聯", "記憶體控制"), "8069": ("元太", "電子紙"), "6488": ("環球晶", "矽晶圓"),
@@ -240,7 +243,9 @@ ALIAS_MAP = {
     "譜瑞": "譜瑞-KY", "力積": "力積電", "台積": "台積電", "聯發": "聯發科",
     "日月光": "日月光投控", "欣 興": "欣興", "群 聯": "群聯", "國巨*": "國巨",
     "藥華": "藥華藥", "聖 暉": "聖暉", "金 居": "金居", "定穎": "定穎投控",
-    "漢唐": "漢唐", "漢科": "漢科"
+    "漢唐": "漢唐", "漢科": "漢科",
+    # 新增別名
+    "台新金": "台新新光", "台新新光金": "台新新光", "新光金": "台新新光"
 }
 
 # 強制修正表
@@ -282,15 +287,9 @@ def smart_get_code(stock_name):
     code, _, _ = smart_get_code_and_sector(stock_name)
     return code
 
-# --- 【V143】預先批次抓取成交值 (含手動救援 Override) ---
+# --- 【V145】預先批次抓取成交值 (終極修復：加入 Fast Info 即時救援) ---
 @st.cache_data(ttl=300)
 def prefetch_turnover_data(stock_list_str, target_date, manual_override_json=None):
-    """
-    Args:
-        manual_override_json (str): JSON string like '{"StockA": 10.5, "StockB": 5.2}' from DB
-    """
-    
-    # 1. 建立初始名單
     if not stock_list_str: stock_list_str = []
     unique_names = set()
     for s in stock_list_str:
@@ -301,31 +300,22 @@ def prefetch_turnover_data(stock_list_str, target_date, manual_override_json=Non
             
     result_map = {}
     
-    # 2. 優先處理手動救援資料 (Manual Override)
+    # 1. Manual Override
     if manual_override_json:
         try:
             manual_data = json.loads(manual_override_json)
             if isinstance(manual_data, dict):
                 for k, v in manual_data.items():
-                    # 支援名稱或代碼匹配
                     result_map[k] = float(v)
-                    # 嘗試反查代碼或名稱以增加覆蓋率
                     code, name, _ = smart_get_code_and_sector(k)
                     if code: result_map[code] = float(v)
                     if name: result_map[name] = float(v)
-        except:
-            pass # JSON 解析失敗就忽略
+        except: pass
 
-    # 3. 找出還沒數值的股票，準備爬蟲
-    to_fetch_names = []
-    for name in unique_names:
-        if name not in result_map:
-            to_fetch_names.append(name)
-            
-    if not to_fetch_names:
-        return result_map
+    # 2. 準備爬蟲名單
+    to_fetch_names = [name for name in unique_names if name not in result_map]
+    if not to_fetch_names: return result_map
 
-    # 4. 準備 yfinance 代碼
     code_map = {}
     tickers = []
     for name in to_fetch_names:
@@ -337,19 +327,21 @@ def prefetch_turnover_data(stock_list_str, target_date, manual_override_json=Non
             
     if not tickers: return result_map
     
+    # 3. 嘗試批次下載 (History)
     try:
         t_date_dt = pd.to_datetime(target_date)
-        start_dt = t_date_dt - timedelta(days=20)
-        end_dt = t_date_dt + timedelta(days=1)
+        start_dt = t_date_dt - timedelta(days=5) 
+        end_dt = t_date_dt + timedelta(days=2)
         
         start_str = start_dt.strftime("%Y-%m-%d")
         end_str = end_dt.strftime("%Y-%m-%d")
         
-        # 修正 yfinance 可能的問題
+        # 使用 threads=True 加速
         data = yf.download(tickers, start=start_str, end=end_str, group_by='ticker', progress=False, threads=True)
         
         for code, name in code_map.items():
             found_val = 0
+            # A. 先試 History Data
             for suffix in ['.TW', '.TWO']:
                 try:
                     ticker = f"{code}{suffix}"
@@ -358,19 +350,43 @@ def prefetch_turnover_data(stock_list_str, target_date, manual_override_json=Non
                         if not df.empty:
                             df.index = df.index.tz_localize(None).normalize()
                             target_ts = t_date_dt.normalize()
-                            valid_rows = df[df.index <= target_ts]
                             
-                            if not valid_rows.empty:
-                                row = valid_rows.iloc[-1]
-                                price = float(row['Close'])
-                                vol = float(row['Volume'])
-                                if price > 0 and vol > 0:
-                                    val = (price * vol) / 100000000
-                                    if val > 0.01:
-                                        found_val = val
-                                        break
+                            # 優先抓取 target_date
+                            if target_ts in df.index:
+                                row = df.loc[target_ts]
+                            else:
+                                # 抓最近的一筆
+                                valid_rows = df[df.index <= target_ts]
+                                if not valid_rows.empty: row = valid_rows.iloc[-1]
+                                else: continue
+                                    
+                            price = float(row['Close'])
+                            vol = float(row['Volume'])
+                            if price > 0 and vol > 0:
+                                val = (price * vol) / 100000000
+                                if val > 0.01:
+                                    found_val = val
+                                    break
                 except: pass
             
+            # B. 【關鍵修復】如果 History 抓不到 (found_val=0)，改用 Fast Info (即時數據)
+            if found_val == 0:
+                for suffix in ['.TW', '.TWO']:
+                    try:
+                        ticker_obj = yf.Ticker(f"{code}{suffix}")
+                        fi = ticker_obj.fast_info
+                        # 檢查是否有今日數據
+                        last_price = fi.get('last_price', 0)
+                        last_vol = fi.get('last_volume', 0)
+                        
+                        # 簡單檢核：如果價格>0且量>0，就當作是有效的
+                        if last_price > 0 and last_vol > 0:
+                            val = (last_price * last_vol) / 100000000
+                            if val > 0.01:
+                                found_val = val
+                                break
+                    except: pass
+
             if found_val > 0:
                 result_map[name] = found_val
                 result_map[code] = found_val
@@ -379,64 +395,105 @@ def prefetch_turnover_data(stock_list_str, target_date, manual_override_json=Non
     except Exception as e:
         return result_map
 
-# --- 全球市場即時報價 (V150: 雲端環境強制手動計算修復版) ---
-@st.cache_data(ttl=15) # 稍微放寬 TTL 避免一直被擋，但保持相對即時
-def get_global_market_data():
+
+# --- 繪製極簡走勢圖 (Sparkline) ---
+def plot_sparkline(data_list, color_hex):
+    if not data_list or len(data_list) < 2:
+        return None
+    
+    # 建立 X 軸 (簡單序列即可)
+    x_data = list(range(len(data_list)))
+    
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=x_data, 
+        y=data_list, 
+        mode='lines', 
+        line=dict(color=color_hex, width=2),
+        hoverinfo='y' # 只顯示價格
+    ))
+    
+    # 極簡化版面設定 (去除所有邊框、軸線、背景)
+    fig.update_layout(
+        showlegend=False,
+        margin=dict(l=0, r=0, t=5, b=5), # 邊距縮到最小
+        height=50,  # 設定高度 (小圖)
+        paper_bgcolor='rgba(0,0,0,0)', # 透明背景
+        plot_bgcolor='rgba(0,0,0,0)',
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
+        hovermode="x unified"
+    )
+    return fig
+
+
+# --- 全球市場即時報價 (含走勢圖數據版) ---
+@st.cache_data(ttl=60) # 因為抓歷史數據較慢，建議快取時間設 60秒
+def get_global_market_data_with_chart():
     try:
-        # 定義指數代碼與名稱
         indices = {
             "^TWII": "🇹🇼 加權指數", 
             "^TWOII": "🇹🇼 櫃買指數", 
             "^N225": "🇯🇵 日經225",
             "^DJI": "🇺🇸 道瓊工業", 
             "^IXIC": "🇺🇸 那斯達克", 
-            "^SOX": "🇺🇸 費城半導體"
+            "^SOX": "🇺🇸 費城半導體",
+            "BTC-USD": "₿ 比特幣", 
+            "ETH-USD": "Ξ 乙太幣"
         }
-        
         market_data = []
         
+        # 為了加速，我們可以嘗試用批次下載，但為了保持你的邏輯穩健，維持迴圈處理
         for ticker_code, name in indices.items():
             try:
                 stock = yf.Ticker(ticker_code)
                 
-                # V150 關鍵修正：在雲端環境放棄使用 fast_info 或 info
-                # 改為強制抓取過去 5 天的歷史數據，並手動計算 最新價 vs 昨日收盤價
-                # 這樣可以避免雲端主機時間差導致 Yahoo 回傳錯誤的 change 數據
-                hist = stock.history(period="5d", interval="1d")
+                # 關鍵修改：抓取 1 天內，每 15-30 分鐘的資料 (才有走勢)
+                # crypto 24hr 交易，用 1d/15m；股市有開盤時間限制
+                interval = "15m" if "-USD" in ticker_code else "30m"
+                hist = stock.history(period="1d", interval=interval)
                 
-                if hist.empty or len(hist) < 2:
-                    continue
+                if hist.empty:
+                    # 如果因為休市抓不到當日，改抓 5 天日線作為備案
+                    hist = stock.history(period="5d")
                 
-                # 取得最新一筆 (今天的收盤或即時價)
-                last_price = hist['Close'].iloc[-1]
-                
-                # 取得倒數第二筆 (昨天的收盤價)
-                prev_close = hist['Close'].iloc[-2]
-                
-                change = last_price - prev_close
-                pct_change = (change / prev_close) * 100
-                
-                # 顏色邏輯
-                color_class = "up-color" if change > 0 else ("down-color" if change < 0 else "flat-color")
-                card_class = "card-up" if change > 0 else ("card-down" if change < 0 else "card-flat")
-                
-                market_data.append({
-                    "name": name, 
-                    "price": f"{last_price:,.2f}", 
-                    "change": change, 
-                    "pct_change": pct_change, 
-                    "color_class": color_class, 
-                    "card_class": card_class
-                })
+                if not hist.empty and len(hist) >= 1:
+                    last_price = float(hist.iloc[-1]['Close'])
                     
+                    # 取得前日收盤 (用來算漲跌)
+                    try:
+                        # 嘗試用 fast_info 拿昨收
+                        prev_close = stock.fast_info['previous_close']
+                    except:
+                        # 拿不到就用歷史資料的第一筆近似
+                        prev_close = float(hist.iloc[0]['Open'])
+
+                    if prev_close is None: prev_close = last_price
+
+                    change = last_price - prev_close
+                    pct_change = (change / prev_close) * 100
+                    
+                    color_hex = "#e74c3c" if change > 0 else ("#27ae60" if change < 0 else "#95a5a6")
+                    color_class = "up-color" if change > 0 else ("down-color" if change < 0 else "flat-color")
+                    
+                    # 取出走勢數據 (List)
+                    trend_data = hist['Close'].tolist()
+
+                    market_data.append({
+                        "name": name, 
+                        "price": f"{last_price:,.2f}", 
+                        "change": change, 
+                        "pct_change": pct_change, 
+                        "color_class": color_class,
+                        "color_hex": color_hex, # 給圖表用的顏色碼
+                        "trend": trend_data     # 走勢數據
+                    })
             except Exception as e:
-                print(f"Error fetching {ticker_code}: {e}")
+                print(f"Error {ticker_code}: {e}")
                 continue
-                
         return market_data
     except Exception as e:
-        print(f"Global Market Data Error: {e}")
-        return []
+        return []	
 
 # --- 恐懼與貪婪指數 (V154: 結構相容修復版) ---
 @st.cache_data(ttl=300) 
@@ -539,125 +596,61 @@ def plot_fear_greed_gauge(score):
     return fig
 
 def render_global_markets():
-    st.markdown("### 🌏 全球重要指數 (Real-time)")
+    st.markdown("### 🌏 全球指數與加密貨幣 (Real-time Trend)")
     
-    # 取得資料
-    markets = get_global_market_data()
+    markets = get_global_market_data_with_chart()
     
     if markets:
-        # 1. 定義 CSS (V192: 手機滑動 + 電腦滿版均分)
+        # 使用 CSS 稍微修飾一下卡片外觀，讓它看起來像原本的設計
         st.markdown("""
         <style>
-            /* --- 基礎設定 (預設適用於手機/全裝置) --- */
-            
-            /* 容器：預設為水平排列、不換行、可滑動 */
-            div.market-scroll-container {
-                display: flex !important;
-                flex-direction: row !important;
-                flex-wrap: nowrap !important;
-                overflow-x: auto !important;
-                align-items: stretch !important; /* 高度一致 */
-                gap: 12px !important;
-                padding: 5px 2px 15px 2px !important;
-                width: 100% !important;
-                -webkit-overflow-scrolling: touch;
+            .small-card {
+                background-color: #FFFFFF;
+                border-radius: 10px;
+                padding: 10px;
+                text-align: center;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+                border: 1px solid #EAEAEA;
+                margin-bottom: 10px;
+                height: 100%;
             }
-            
-            /* 卡片：預設為固定寬度 (手機才好滑) */
-            div.market-scroll-container .market-card {
-                flex: 0 0 auto !important;     /* 手機版：禁止縮放 */
-                width: 160px !important;       /* 手機版：固定寬度 */
-                min-width: 160px !important;
-                min-height: 140px !important;
-                background-color: #FFFFFF !important;
-                border-radius: 10px !important;
-                padding: 15px !important;
-                box-shadow: 0 2px 5px rgba(0,0,0,0.08) !important;
-                border: 1px solid #EAEAEA !important;
-                text-align: center !important;
-                margin: 0 !important;
-                
-                /* 內部排版 */
-                display: flex !important;
-                flex-direction: column !important;
-                justify-content: center !important;
-                align-items: center !important;
-            }
-
-            /* --- 💻 電腦版覆寫 (當螢幕寬度大於 768px 時觸發) --- */
-            @media (min-width: 768px) {
-                /* 容器：隱藏捲軸 (因為會滿版顯示，不需要捲動) */
-                div.market-scroll-container {
-                    overflow-x: hidden !important; 
-                    justify-content: space-between !important; /* 確保均分 */
-                }
-                
-                /* 卡片：改為彈性寬度 (Grow) */
-                div.market-scroll-container .market-card {
-                    flex: 1 1 0px !important;  /* 關鍵：讓所有卡片平分剩餘空間 */
-                    width: auto !important;    /* 解除固定寬度限制 */
-                    min-width: 0 !important;   /* 允許縮小以適應容器 */
-                    max-width: 100% !important;
-                }
-            }
-
-            /* --- 通用樣式 --- */
-            .market-name { 
-                font-size: 1.0rem; 
-                font-weight: bold; 
-                color: #555; 
-                margin-bottom: 8px !important;
-                white-space: nowrap !important; 
-            }
-            .market-price { 
-                font-size: 1.8rem; /* 電腦版空間大，字體可以大氣一點 */
-                font-weight: 900; 
-                margin: 0 0 8px 0 !important;
-                line-height: 1.2 !important;
-                white-space: nowrap !important;
-            }
-            .market-change { 
-                font-size: 1.0rem; 
-                font-weight: 700; 
-                white-space: nowrap !important;
-            }
-            
-            /* 顏色定義 */
-            .up-color { color: #e74c3c !important; }
-            .down-color { color: #27ae60 !important; }
-            .flat-color { color: #7f8c8d !important; }
-            
-            .card-up { border-bottom: 5px solid #e74c3c !important; }
-            .card-down { border-bottom: 5px solid #27ae60 !important; }
-            .card-flat { border-bottom: 5px solid #95a5a6 !important; }
-
-            /* 隱藏捲軸 */
-            div.market-scroll-container::-webkit-scrollbar { height: 6px; }
-            div.market-scroll-container::-webkit-scrollbar-thumb { background-color: #e0e0e0; border-radius: 4px; }
+            .sc-name { font-size: 0.9rem; color: #666; font-weight: bold; margin-bottom: 2px; }
+            .sc-price { font-size: 1.4rem; font-weight: 900; margin: 0; line-height: 1.2; font-family: 'Roboto', sans-serif; }
+            .sc-change { font-size: 0.9rem; font-weight: bold; }
         </style>
         """, unsafe_allow_html=True)
 
-        # 2. 組合 HTML (無縮排，確保安全)
-        full_html = '<div class="market-scroll-container">'
+        # 響應式佈局：依螢幕寬度自動換行 (這裡用 Streamlit 的 columns 模擬)
+        # 我們一行顯示 4 個，總共可能有 8 個，所以分兩列處理
         
-        for m in markets:
-            card_html = (
-                f'<div class="market-card {m["card_class"]}">'
-                f'<div class="market-name">{m["name"]}</div>'
-                f'<div class="market-price {m["color_class"]}">{m["price"]}</div>'
-                f'<div class="market-change {m["color_class"]}">{m["change"]:+.2f} ({m["pct_change"]:+.2f}%)</div>'
-                f'</div>'
-            )
-            full_html += card_html
+        # 定義每行顯示幾個
+        cols_per_row = 4 
+        
+        # 將資料分組
+        for i in range(0, len(markets), cols_per_row):
+            cols = st.columns(cols_per_row)
+            batch_markets = markets[i:i+cols_per_row]
             
-        full_html += '</div>'
-        
-        # 3. 渲染
-        st.markdown(full_html, unsafe_allow_html=True)
-    
+            for idx, m in enumerate(batch_markets):
+                with cols[idx]:
+                    # 1. 顯示文字資訊 (HTML)
+                    html_content = f"""
+                    <div class="small-card" style="border-bottom: 3px solid {m['color_hex']};">
+                        <div class="sc-name">{m['name']}</div>
+                        <div class="sc-price {m['color_class']}">{m['price']}</div>
+                        <div class="sc-change {m['color_class']}">{m['change']:+.2f} ({m['pct_change']:+.2f}%)</div>
+                    </div>
+                    """
+                    st.markdown(html_content, unsafe_allow_html=True)
+                    
+                    # 2. 顯示走勢圖 (Plotly) - 緊接在文字下方
+                    fig = plot_sparkline(m['trend'], m['color_hex'])
+                    if fig:
+                        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+                    
     else:
-        st.info("⏳ 指數資料讀取中...")
-
+        st.info("⏳ 市場資料讀取中...")
+    
     st.divider()
 
 # --- 真實爬蟲排行 ---
@@ -1416,15 +1409,15 @@ def show_dashboard():
             
             # 卡片 1: 積極循環
             val_act = f"{d_act} <span style='font-size:16px; color:#999'>({cnt_strong}/{cnt_chaos})</span> <span style='font-size:12px'>天</span>"
-            c1 = make_card_html("bd-red", "🔴 強風/亂流", val_act, f"佔比 {p_act:.0f}%", "#e74c3c", p_act)
+            c1 = make_card_html("bd-red", "🔴 強風/亂流循環", val_act, f"佔比 {p_act:.0f}%", "#e74c3c", p_act)
             c2 = make_card_html("bd-red", "🚀 積極績效", f"<span style='color:{c_act_val}'>{r_act:+.2f}%</span>", f"預估報酬{sub_text_suffix}")
             
             val_tran = f"{d_tran} <span style='font-size:12px'>天</span>"
             c3 = make_card_html("bd-yellow", "🟡 循環交界", val_tran, f"佔比 {p_tran:.0f}%", "#f1c40f", p_tran)
-            c4 = make_card_html("bd-yellow", "⚖️ 交界績效", f"<span style='color:{c_tran_val}'>{r_tran:+.2f}%</span>", f"預估波動{sub_text_suffix}")
+            c4 = make_card_html("bd-yellow", "⚖️ 無方向績效", f"<span style='color:{c_tran_val}'>{r_tran:+.2f}%</span>", f"預估波動{sub_text_suffix}")
             
             val_pass = f"{d_pass} <span style='font-size:16px; color:#999'>({cnt_calm}/{cnt_gust})</span> <span style='font-size:12px'>天</span>"
-            c5 = make_card_html("bd-green", "🟢 無風/陣風", val_pass, f"佔比 {p_pass:.0f}%", "#2ecc71", p_pass)
+            c5 = make_card_html("bd-green", "🟢 無風/陣風循環", val_pass, f"佔比 {p_pass:.0f}%", "#2ecc71", p_pass)
             c6 = make_card_html("bd-green", "🛡️ 保守績效", f"<span style='color:{c_pass_val}'>{r_pass:+.2f}%</span>", f"預估損益{sub_text_suffix}")
             
             st.markdown(f'<div class="dashboard-grid-v183">{c1}{c2}{c3}{c4}{c5}{c6}</div>', unsafe_allow_html=True)
@@ -1761,4 +1754,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
