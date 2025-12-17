@@ -401,27 +401,35 @@ def plot_sparkline(data_list, color_hex):
     if not data_list or len(data_list) < 2:
         return None
     
-    # 建立 X 軸 (簡單序列即可)
     x_data = list(range(len(data_list)))
     
+    # 將 Hex 顏色轉為 RGB 以設定透明度
+    # 例如 #e74c3c -> rgba(231, 76, 60, 0.1)
+    hex_color = color_hex.lstrip('#')
+    rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    fill_color = f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, 0.1)" # 10% 透明度背景
+    
     fig = go.Figure()
+    
     fig.add_trace(go.Scatter(
         x=x_data, 
         y=data_list, 
         mode='lines', 
-        line=dict(color=color_hex, width=2),
-        hoverinfo='y' # 只顯示價格
+        fill='tozeroy',       # 填充至底部
+        fillcolor=fill_color, # 設定填充顏色
+        line=dict(color=color_hex, width=2.5, shape='spline', smoothing=1.3), # 加粗線條並平滑化
+        hoverinfo='y'
     ))
     
-    # 極簡化版面設定 (去除所有邊框、軸線、背景)
+    # 極簡化版面設定
     fig.update_layout(
         showlegend=False,
-        margin=dict(l=0, r=0, t=5, b=5), # 邊距縮到最小
-        height=50,  # 設定高度 (小圖)
-        paper_bgcolor='rgba(0,0,0,0)', # 透明背景
+        margin=dict(l=0, r=0, t=10, b=0), # 上方留一點空間，底部貼齊
+        height=60,  # 稍微加高一點
+        paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
-        xaxis=dict(visible=False),
-        yaxis=dict(visible=False),
+        xaxis=dict(visible=False, showgrid=False), # 隱藏 X 軸
+        yaxis=dict(visible=False, showgrid=False), # 隱藏 Y 軸
         hovermode="x unified"
     )
     return fig
@@ -601,52 +609,128 @@ def render_global_markets():
     markets = get_global_market_data_with_chart()
     
     if markets:
-        # 使用 CSS 稍微修飾一下卡片外觀，讓它看起來像原本的設計
+        # --- 專業版面 CSS 設計 ---
         st.markdown("""
         <style>
-            .small-card {
+            /* 卡片容器：白色背景、圓角、陰影、懸停效果 */
+            .market-card-pro {
                 background-color: #FFFFFF;
-                border-radius: 10px;
-                padding: 10px;
-                text-align: center;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-                border: 1px solid #EAEAEA;
-                margin-bottom: 10px;
+                border-radius: 16px;          /* 更圓潤的邊角 */
+                padding: 15px 15px 0px 15px;  /* 底部 padding 為 0，讓圖表貼底 */
+                box-shadow: 0 4px 12px rgba(0,0,0,0.05); /* 柔和陰影 */
+                border: 1px solid #F0F2F6;
+                transition: transform 0.2s ease, box-shadow 0.2s ease;
                 height: 100%;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                overflow: hidden; /* 確保圖表不會溢出圓角 */
             }
-            .sc-name { font-size: 0.9rem; color: #666; font-weight: bold; margin-bottom: 2px; }
-            .sc-price { font-size: 1.4rem; font-weight: 900; margin: 0; line-height: 1.2; font-family: 'Roboto', sans-serif; }
-            .sc-change { font-size: 0.9rem; font-weight: bold; }
+            
+            .market-card-pro:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+            }
+
+            /* 標題區：左對齊，深灰色 */
+            .mc-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 5px;
+            }
+            .mc-name { 
+                font-size: 0.95rem; 
+                color: #555; 
+                font-weight: 700; 
+                letter-spacing: 0.5px;
+            }
+            .mc-market-badge {
+                font-size: 0.7rem;
+                padding: 2px 6px;
+                background-color: #f1f3f4;
+                border-radius: 4px;
+                color: #666;
+            }
+
+            /* 數據區：價格放大 */
+            .mc-price-box {
+                text-align: left; /* 靠左對齊更像專業報表 */
+            }
+            .mc-price { 
+                font-size: 1.8rem; 
+                font-weight: 800; 
+                color: #1a1a1a; 
+                line-height: 1.1; 
+                font-family: 'Roboto', sans-serif;
+                margin: 5px 0;
+            }
+            
+            /* 漲跌幅：更精緻的標籤 */
+            .mc-change { 
+                font-size: 0.9rem; 
+                font-weight: 600; 
+                display: inline-block;
+            }
+            .up-text { color: #e74c3c; }
+            .down-text { color: #27ae60; }
+            .flat-text { color: #95a5a6; }
+            
+            /* 分隔與版面 */
+            .chart-container {
+                margin-top: 5px;
+                margin-left: -15px;  /* 抵消 padding，讓圖表滿版 */
+                margin-right: -15px; /* 抵消 padding */
+                margin-bottom: -5px; /* 微調底部 */
+            }
         </style>
         """, unsafe_allow_html=True)
 
-        # 響應式佈局：依螢幕寬度自動換行 (這裡用 Streamlit 的 columns 模擬)
-        # 我們一行顯示 4 個，總共可能有 8 個，所以分兩列處理
-        
-        # 定義每行顯示幾個
         cols_per_row = 4 
         
-        # 將資料分組
         for i in range(0, len(markets), cols_per_row):
             cols = st.columns(cols_per_row)
             batch_markets = markets[i:i+cols_per_row]
             
             for idx, m in enumerate(batch_markets):
                 with cols[idx]:
-                    # 1. 顯示文字資訊 (HTML)
-                    html_content = f"""
-                    <div class="small-card" style="border-bottom: 3px solid {m['color_hex']};">
-                        <div class="sc-name">{m['name']}</div>
-                        <div class="sc-price {m['color_class']}">{m['price']}</div>
-                        <div class="sc-change {m['color_class']}">{m['change']:+.2f} ({m['pct_change']:+.2f}%)</div>
-                    </div>
-                    """
-                    st.markdown(html_content, unsafe_allow_html=True)
+                    # 1. 卡片上半部 (HTML 文字區)
+                    # 判斷箭頭符號
+                    arrow = "▲" if m['change'] > 0 else ("▼" if m['change'] < 0 else "-")
+                    text_color = "up-text" if m['change'] > 0 else ("down-text" if m['change'] < 0 else "flat-text")
                     
-                    # 2. 顯示走勢圖 (Plotly) - 緊接在文字下方
+                    # 取得國旗或分類標籤 (簡單處理 name 字串)
+                    # 假設 name 是 "🇺🇸 道瓊工業"，我們可以用 split 稍微分一下，或直接顯示
+                    badge = m['name'].split(' ')[0] if ' ' in m['name'] else 'MK'
+                    clean_name = ' '.join(m['name'].split(' ')[1:]) if ' ' in m['name'] else m['name']
+
+                    st.markdown(f"""
+                    <div class="market-card-pro">
+                        <div>
+                            <div class="mc-header">
+                                <span class="mc-name">{clean_name}</span>
+                                <span class="mc-market-badge">{badge}</span>
+                            </div>
+                            <div class="mc-price-box">
+                                <div class="mc-price">{m['price']}</div>
+                                <div class="mc-change {text_color}">
+                                    {arrow} {abs(m['change']):.2f} ({abs(m['pct_change']):.2f}%)
+                                </div>
+                            </div>
+                        </div>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # 2. 卡片下半部 (圖表區)
+                    # 這裡使用 CSS margin hack 將圖表 "推" 進上面的 div 視覺範圍內
+                    # 但因為 Streamlit 機制限制，最好的方法是讓圖表緊接在後，看起來像一體
+                    
                     fig = plot_sparkline(m['trend'], m['color_hex'])
                     if fig:
-                        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+                        # 負的 margin-top 是為了讓圖表向上移動，無縫接軌 HTML 卡片底部
+                        st.markdown('<div class="chart-container" style="margin-top: -65px; position: relative; z-index: 1; pointer-events: none;">', unsafe_allow_html=True) 
+                        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'staticPlot': True})
+                        st.markdown('</div>', unsafe_allow_html=True)
                     
     else:
         st.info("⏳ 市場資料讀取中...")
