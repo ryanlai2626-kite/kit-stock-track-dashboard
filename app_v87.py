@@ -497,7 +497,88 @@ def make_sparkline_svg(data_list, color_hex, width=200, height=50):
 from datetime import datetime
 import pytz # 確保有導入時區庫，用於判斷台股日期
 
-# --- 全球市場即時報價 (V168: 櫃買走勢修復 + 台股昨收強制校正版) ---
+# --- [新增] 強制爬取 Yahoo 網頁即時指數 (V185: 高相容性爬蟲版) ---
+def fetch_tw_index_from_web(ticker):
+    """
+    針對 ^TWII 和 ^TWOII，直接爬取 Yahoo 奇摩股市網頁。
+    改進版：使用更靈活的正則表達式提取數字，不依賴特定分隔符。
+    """
+    try:
+        # 定義目標 URL
+        url_map = {
+            "^TWII": "https://tw.stock.yahoo.com/quote/^TWII",
+            "^TWOII": "https://tw.stock.yahoo.com/quote/^TWOII"
+        }
+        url = url_map.get(ticker)
+        if not url: return None
+
+        # 模擬真實瀏覽器 headers (非常重要，防止被擋)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Referer": "https://tw.stock.yahoo.com/",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7"
+        }
+        
+        # 發送請求
+        r = requests.get(url, headers=headers, timeout=5)
+        
+        if r.status_code != 200:
+            print(f"Web fetch failed: Status {r.status_code}")
+            return None
+
+        # 策略 1: 嘗試抓取 Meta Tag (最快)
+        # 格式通常為: "櫃買指數 (TWOII) 265.55 ▲1.23 (+0.46%) - Yahoo!奇摩股市"
+        # 我們直接尋找 (TWOII) 或 (TWII) 後面的數字
+        
+        # 定義代號關鍵字
+        symbol_key = "TWOII" if "TWO" in ticker else "TWII"
+        
+        # 使用正則表達式尋找 og:title
+        match = re.search(r'<meta property="og:title" content="([^"]+)"', r.text)
+        if match:
+            content = match.group(1)
+            
+            # 確保抓到的是對的商品
+            if symbol_key in content:
+                # 移除所有逗號 (千分位)，避免干擾數字解析
+                clean_content = content.replace(',', '')
+                
+                # 提取內容中所有的「浮點數」 (例如: 265.55, 1.23, 0.46)
+                # 邏輯：找尋 (數字.數字) 的模式
+                nums = re.findall(r'(\d+\.\d+)', clean_content)
+                
+                if len(nums) >= 3:
+                    price = float(nums[0])      # 第一個通常是價格
+                    change_val = float(nums[1]) # 第二個是漲跌值
+                    pct_val = float(nums[2])    # 第三個是幅度
+                    
+                    # 判斷正負號 (檢查是否包含「下」或「負」的符號)
+                    # Yahoo 常見跌符號: ▼, ▽, -
+                    is_down = any(s in content for s in ['▼', '▽', '-']) and not any(s in content for s in ['▲', '△', '+'])
+                    
+                    # 如果判斷是跌，且抓到的數字是正的，就手動轉負
+                    # 注意：有時候 regex 會把 -1.23 的 - 漏掉，所以這裡強制校正
+                    if is_down:
+                        change_val = -abs(change_val)
+                        pct_val = -abs(pct_val)
+                    else:
+                        change_val = abs(change_val)
+                        pct_val = abs(pct_val)
+
+                    return {
+                        "price": price,
+                        "change": change_val,
+                        "pct_change": pct_val
+                    }
+
+    except Exception as e:
+        print(f"Web fetch error for {ticker}: {e}")
+        return None
+    return None
+
+
+# --- 全球市場即時報價 (V185: 網頁爬蟲混和版 - 高容錯) ---
 @st.cache_data(ttl=20)
 def get_global_market_data_with_chart():
     try:
@@ -513,82 +594,65 @@ def get_global_market_data_with_chart():
         }
         market_data = []
         
-        # 設定台北時區，確保日期判斷正確
-        tz_tw = pytz.timezone('Asia/Taipei')
-        
         for ticker_code, name in indices.items():
             try:
                 stock = yf.Ticker(ticker_code)
                 
-                # --- 1. 修復走勢圖 (Trend Fix) ---
-                # 預設抓取當日分時 (5分K)
+                # --- 1. 準備走勢圖數據 (依然使用 yfinance, 因為需要歷史序列) ---
                 is_crypto = "-USD" in ticker_code
                 interval = "15m" if is_crypto else "5m"
                 
-                # 嘗試 1: 抓取當日數據
+                # 嘗試抓取 1 天內的數據
                 hist_intra = stock.history(period="1d", interval=interval)
                 
-                # 嘗試 2 (櫃買指數救援): 如果當日數據全空或太少
+                # 如果沒資料，抓 5 天
                 if hist_intra.empty or len(hist_intra) < 5:
-                    # 改抓「近 5 日」的「60分K」，確保一定有線條可畫
                     hist_intra = stock.history(period="5d", interval="60m")
                 
-                # 嘗試 3 (最後防線): 如果還是空，抓日線
+                # 如果還是沒資料，抓 1 個月日線
                 if hist_intra.empty:
                     hist_intra = stock.history(period="1mo", interval="1d")
 
-                # 取出數據
                 trend_data = hist_intra['Close'].dropna().tolist()
 
-                # --- 2. 修復漲跌幅 (Price Fix) ---
-                # 取得 5 日日線資料，這是計算昨收最準確的來源
-                hist_daily = stock.history(period="5d")
-                
+                # --- 2. 決定價格數據 (Price Source) ---
                 last_price = None
-                prev_close = None
+                change = 0
+                pct_change = 0
                 
-                # A. 先嘗試取得即時報價 (fast_info)
-                try:
-                    fi = stock.fast_info
-                    last_price = fi.last_price
-                    prev_close = fi.previous_close
-                except: pass
+                # 【策略 A】如果是台灣指數，優先使用網頁爬蟲 (Source of Truth)
+                if ticker_code in ["^TWII", "^TWOII"]:
+                    web_data = fetch_tw_index_from_web(ticker_code)
+                    if web_data and web_data['price'] > 0:
+                        last_price = web_data['price']
+                        change = web_data['change']
+                        pct_change = web_data['pct_change']
                 
-                # B. 台股強制校正邏輯 (Taiwan Fix)
-                # 針對加權與櫃買，強制檢查日線日期，不完全信任 fast_info 的昨收
-                if ticker_code in ["^TWII", "^TWOII"] and not hist_daily.empty:
-                    # 取得資料庫中最後一筆的日期
-                    last_candle_date = hist_daily.index[-1].date()
-                    current_date = datetime.now(tz_tw).date()
-                    
-                    # 判斷邏輯：
-                    # 如果日線最後一筆是「今天」，代表盤中或已收盤 -> 昨收是「倒數第二筆」
-                    if last_candle_date == current_date:
-                        if len(hist_daily) >= 2:
-                            prev_close = float(hist_daily.iloc[-2]['Close'])
-                            # 如果 fast_info 沒抓到最新價，就用日線收盤價
-                            if last_price is None: 
-                                last_price = float(hist_daily.iloc[-1]['Close'])
-                    else:
-                        # 如果日線最後一筆是「昨天」(尚未更新到今天) -> 昨收就是「最後一筆」
-                        prev_close = float(hist_daily.iloc[-1]['Close'])
+                # 【策略 B】如果不是台灣指數，或爬蟲失敗，使用 yfinance fast_info
+                if last_price is None:
+                    try:
+                        fi = stock.fast_info
+                        if fi.last_price is not None:
+                            last_price = float(fi.last_price)
+                            prev_close = float(fi.previous_close)
+                            change = last_price - prev_close
+                            pct_change = (change / prev_close) * 100 if prev_close != 0 else 0
+                    except: pass
 
-                # C. 一般防呆 (若上述都失敗)
-                if last_price is None and not hist_daily.empty:
-                    last_price = float(hist_daily.iloc[-1]['Close'])
-                
-                # 如果 prev_close 還是空的，嘗試用日線補
-                if (prev_close is None or pd.isna(prev_close)) and len(hist_daily) >= 2:
-                    prev_close = float(hist_daily.iloc[-2]['Close'])
+                # 【策略 C】如果 fast_info 也失敗 (極端狀況)，用歷史資料補
+                # 這是最後一道防線，雖然可能不準，但總比空白好
+                if last_price is None and not hist_intra.empty:
+                    last_price = float(hist_intra.iloc[-1]['Close'])
+                    if len(hist_intra) >= 2:
+                        # 嘗試用開盤價當作基準來算漲跌，避免 0
+                        prev = float(hist_intra.iloc[0]['Open']) 
+                        change = last_price - prev
+                        pct_change = (change / prev) * 100
 
-                # 若真的缺資料，跳過此檔
-                if last_price is None or prev_close is None: continue
+                # 最終檢查
+                if last_price is None: continue
 
-                # 計算漲跌
-                change = last_price - prev_close
-                pct_change = (change / prev_close) * 100
-                
-                # 顏色邏輯 (紅漲綠跌)
+                # 顏色邏輯
                 color_hex = "#DC2626" if change > 0 else ("#059669" if change < 0 else "#6B7280")
                 
                 market_data.append({
@@ -604,7 +668,7 @@ def get_global_market_data_with_chart():
                 continue
         return market_data
     except Exception as e:
-        return []	
+        return []		
 
 # --- 恐懼與貪婪指數 (V154: 結構相容修復版) ---
 @st.cache_data(ttl=300) 
@@ -813,6 +877,59 @@ def render_global_markets():
     
     st.divider()
 
+    # 2. 下半部：恐懼貪婪指數儀表板 (V150: 含除錯模式)
+    fg_data = get_cnn_fear_greed_full()
+    
+    st.subheader("😱 恐懼與貪婪指數 (Fear & Greed Index)")
+
+    # V150 Fix: 如果 API 失敗，顯示錯誤原因或 Fallback，而不是隱形
+    if fg_data and "error" in fg_data:
+        st.warning(f"⚠️ 無法取得 CNN 即時數據 (原因: {fg_data['error']})。可能是因為雲端主機 IP 被新聞網站防火牆阻擋。建議稍後再試。")
+    elif fg_data:
+        c1, c2 = st.columns([1, 1])
+        
+        # 左側：儀表板
+        with c1:
+            st.plotly_chart(plot_fear_greed_gauge(fg_data['score']), use_container_width=True)
+            lbl, color = get_rating_label_cn(fg_data['score'])
+            st.markdown(f"<div style='text-align:center; font-weight:bold; font-size:1.5rem; color:{color};'>{lbl}</div>", unsafe_allow_html=True)
+            
+        # 右側：歷史數據表
+        with c2:
+            st.markdown("#### 市場情緒變化趨勢")
+            st.caption("對比不同期間的市場情緒，掌握情緒變化趨勢")
+            
+            # Helper render function
+            def render_row(title, date_str, score):
+                label, color = get_rating_label_cn(score)
+                return f"""
+                <div class="fg-history-row">
+                    <div style="flex:2;">
+                        <div style="font-weight:bold; color:#333;">{title}</div>
+                        <div style="color:#888; font-size:12px;">{date_str}</div>
+                    </div>
+                    <div style="flex:1; display:flex; align-items:center; justify-content:flex-end;">
+                        <span style="background-color:{color}; color:white; padding:2px 8px; border-radius:4px; font-size:12px; margin-right:8px;">{label}</span>
+                        <span style="font-weight:900; font-size:18px; color:#333; min-width:30px; text-align:right;">{score}</span>
+                    </div>
+                </div>
+                """
+            
+            html_content = ""
+            html_content += render_row("當日", fg_data['date'], fg_data['score'])
+            
+            hist = fg_data['history']
+            if hist['prev']['score']: html_content += render_row("前一交易日", hist['prev']['date'], hist['prev']['score'])
+            if hist['week']['score']: html_content += render_row("一週前", hist['week']['date'], hist['week']['score'])
+            if hist['month']['score']: html_content += render_row("一個月前", hist['month']['date'], hist['month']['score'])
+            if hist['year']['score']: html_content += render_row("一年前", hist['year']['date'], hist['year']['score'])
+            
+            st.markdown(html_content, unsafe_allow_html=True)
+    else:
+        st.info("⏳ 正在連線至 CNN 伺服器，請稍候... (若長時間未顯示，請重新整理)")
+
+    st.divider()
+
 # --- 真實爬蟲排行 ---
 @st.cache_data(ttl=60) 
 def get_yahoo_realtime_rank(limit=20):
@@ -899,30 +1016,65 @@ def get_yahoo_realtime_rank(limit=20):
     return pd.DataFrame()
 
 def plot_market_index(index_type='上市', period='6mo'):
-    ticker_map = {'上市': '^TWII', '上櫃': '^TWOII'}
+    # 新增 BTC 和 ETH 的對應
+    ticker_map = {
+        '上市': '^TWII', 
+        '上櫃': '^TWOII',
+        '比特幣': 'BTC-USD',
+        '乙太幣': 'ETH-USD'
+    }
     ticker = ticker_map.get(index_type, '^TWII')
+    
     try:
         stock = yf.Ticker(ticker)
         df = stock.history(period=period)
         if df.empty: return None, f"無法取得 {index_type} 指數資料"
+        
+        # 計算均線
         df['MA5'] = df['Close'].rolling(window=5).mean()
         df['MA10'] = df['Close'].rolling(window=10).mean()
         df['MA20'] = df['Close'].rolling(window=20).mean()
         df['MA60'] = df['Close'].rolling(window=60).mean()
-        fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, subplot_titles=(f'{index_type}指數', '成交量'), row_width=[0.2, 0.8])
+        
+        # 建立雙子圖 (上圖K線，下圖成交量)
+        fig = make_subplots(
+            rows=2, cols=1, 
+            shared_xaxes=True, 
+            vertical_spacing=0.03, 
+            subplot_titles=(f'{index_type}走勢', '成交量'), 
+            row_heights=[0.7, 0.3] # 調整高度比例
+        )
+        
+        # --- K線圖 (Row 1) ---
         fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name='K線', increasing_line_color='#ef5350', decreasing_line_color='#26a69a'), row=1, col=1)
-        fig.add_trace(go.Scatter(x=df.index, y=df['MA5'], line=dict(color='#9C27B0', width=1.5), name='MA5 (週)'), row=1, col=1)
-        fig.add_trace(go.Scatter(x=df.index, y=df['MA10'], line=dict(color='#FFC107', width=1.5), name='MA10 (雙週)'), row=1, col=1)
-        fig.add_trace(go.Scatter(x=df.index, y=df['MA20'], line=dict(color='#2196F3', width=1.5), name='MA20 (月)'), row=1, col=1)
-        fig.add_trace(go.Scatter(x=df.index, y=df['MA60'], line=dict(color='#4CAF50', width=1.5), name='MA60 (季)'), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['MA5'], line=dict(color='#9C27B0', width=1.5), name='MA5'), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['MA10'], line=dict(color='#FFC107', width=1.5), name='MA10'), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['MA20'], line=dict(color='#2196F3', width=1.5), name='MA20'), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['MA60'], line=dict(color='#4CAF50', width=1.5), name='MA60'), row=1, col=1)
+        
+        # --- 成交量 (Row 2) ---
         colors = ['#ef5350' if row['Open'] - row['Close'] <= 0 else '#26a69a' for index, row in df.iterrows()]
         fig.add_trace(go.Bar(x=df.index, y=df['Volume'], marker_color=colors, name='成交量'), row=2, col=1)
-        fig.update_layout(height=600, margin=dict(l=20, r=20, t=40, b=20), paper_bgcolor='white', plot_bgcolor='#FAFAFA', font=dict(family="Arial, sans-serif", size=12, color='#333333'), legend=dict(orientation="h", yanchor="top", y=0.99, xanchor="left", x=0.01, bgcolor="rgba(255, 255, 255, 0.8)", bordercolor="#E0E0E0", borderwidth=1), xaxis_rangeslider_visible=False, hovermode='x unified')
+        
+        # --- 版面設定 ---
+        fig.update_layout(
+            height=600, 
+            margin=dict(l=20, r=20, t=40, b=20), 
+            paper_bgcolor='white', 
+            plot_bgcolor='#FAFAFA', 
+            font=dict(family="Arial, sans-serif", size=12, color='#333333'), 
+            legend=dict(orientation="h", yanchor="top", y=1.02, xanchor="left", x=0.01), 
+            xaxis_rangeslider_visible=False, 
+            hovermode='x unified'
+        )
+        
+        # 設定座標軸樣式
         grid_style = dict(showgrid=True, gridwidth=1, gridcolor='#F0F0F0')
         fig.update_xaxes(**grid_style, row=1, col=1)
-        fig.update_yaxes(**grid_style, title='指數', row=1, col=1)
+        fig.update_yaxes(**grid_style, title='價格', row=1, col=1)
         fig.update_xaxes(**grid_style, row=2, col=1)
         fig.update_yaxes(**grid_style, title='量', row=2, col=1)
+        
         return fig, ""
     except Exception as e: return None, f"繪圖錯誤: {str(e)}"
 
@@ -1087,6 +1239,164 @@ def calculate_monthly_stats(df):
     final_df = pd.concat(all_stats)
     final_df = final_df.sort_values(['Month', 'Strategy', 'Count'], ascending=[False, True, False])
     return final_df
+
+import math
+import plotly.graph_objects as go
+
+# --- [V5 絕對座標修正版] 風度儀表板 ---
+# 放棄 Plotly 內建 Gauge，改用幾何繪圖以確保長寬比與落點絕對精準
+def plot_wind_gauge(wind_status, streak_days):
+    # 1. 定義顏色與文字設定
+    # 順序：綠(左) -> 黃 -> 紫 -> 紅(右)
+    # 角度對應 (0度在右邊, 180度在左邊)
+    sectors = [
+        {'label': '無風', 'color': '#2ecc71', 'text_color': 'white', 'start': 180, 'end': 135},
+        {'label': '陣風', 'color': '#f1c40f', 'text_color': 'black', 'start': 135, 'end': 90}, # 黃底改黑字
+        {'label': '亂流', 'color': '#9b59b6', 'text_color': 'white', 'start': 90,  'end': 45},
+        {'label': '強風', 'color': '#e74c3c', 'text_color': 'white', 'start': 45,  'end': 0},
+    ]
+
+    # 2. 判斷當前狀態的角度
+    clean_status = str(wind_status).strip()
+    target_angle = 90 # 預設指向上方
+    current_color = '#95a5a6'
+    
+    # 根據狀態決定指針角度 (指在該區塊的正中間)
+    if clean_status == '無風': target_angle = 157.5; current_color = '#2ecc71'
+    elif clean_status == '陣風': target_angle = 112.5; current_color = '#f1c40f'
+    elif clean_status == '亂流': target_angle = 67.5;  current_color = '#9b59b6'
+    elif clean_status == '強風': target_angle = 22.5;  current_color = '#e74c3c'
+
+    fig = go.Figure()
+
+    # 3. 繪製扇形背景 (使用 Scatter 填充)
+    # 建立一個輔助函式來產生扇形路徑
+    def get_fan_shape(start_deg, end_deg, color):
+        # 內圓半徑與外圓半徑
+        r_in = 0.5
+        r_out = 1.0
+        
+        # 產生圓弧上的點 (每 2 度一個點，讓線條滑順)
+        path_x = []
+        path_y = []
+        
+        # 外圓弧
+        for deg in range(start_deg, end_deg - 1, -2):
+            rad = math.radians(deg)
+            path_x.append(r_out * math.cos(rad))
+            path_y.append(r_out * math.sin(rad))
+        
+        # 內圓弧 (反向回來)
+        for deg in range(end_deg, start_deg + 1, 2):
+            rad = math.radians(deg)
+            path_x.append(r_in * math.cos(rad))
+            path_y.append(r_in * math.sin(rad))
+            
+        # 閉合多邊形
+        return go.Scatter(
+            x=path_x, y=path_y, 
+            fill='toself', 
+            fillcolor=color, 
+            line=dict(color='white', width=1), # 白色邊框分隔
+            mode='lines', 
+            showlegend=False,
+            hoverinfo='skip'
+        )
+
+    for sector in sectors:
+        # 畫扇形
+        fig.add_trace(get_fan_shape(sector['start'], sector['end'], sector['color']))
+        
+        # 畫文字 (計算扇形中心點)
+        mid_angle = (sector['start'] + sector['end']) / 2
+        mid_rad = math.radians(mid_angle)
+        r_text = 0.75 # 文字半徑位置
+        
+        fig.add_trace(go.Scatter(
+            x=[r_text * math.cos(mid_rad)],
+            y=[r_text * math.sin(mid_rad)],
+            mode='text',
+            text=[sector['label']],
+            textfont=dict(size=18, color=sector['text_color'], weight='bold', family="Arial"),
+            showlegend=False,
+            hoverinfo='skip'
+        ))
+
+    # 4. 繪製指針 (Needle)
+    # 使用三角形：尖端指向 target_angle，底部在圓心
+    needle_len = 0.6  # 指針長度 (不超過外圓)
+    needle_width = 0.08 # 指針底部寬度
+    
+    rad = math.radians(target_angle)
+    # 尖端座標
+    x_tip = needle_len * math.cos(rad)
+    y_tip = needle_len * math.sin(rad)
+    
+    # 底部兩點座標 (垂直於指針方向)
+    x_base_L = needle_width * math.cos(rad - math.pi/2)
+    y_base_L = needle_width * math.sin(rad - math.pi/2)
+    x_base_R = needle_width * math.cos(rad + math.pi/2)
+    y_base_R = needle_width * math.sin(rad + math.pi/2)
+
+    # 畫指針本體
+    fig.add_trace(go.Scatter(
+        x=[x_tip, x_base_L, x_base_R, x_tip],
+        y=[y_tip, y_base_L, y_base_R, y_tip],
+        fill='toself',
+        fillcolor='#333333',
+        line=dict(color='#333333', width=1),
+        mode='lines',
+        showlegend=False,
+        hoverinfo='skip'
+    ))
+    
+    # 畫中心圓點
+    fig.add_trace(go.Scatter(
+        x=[0], y=[0], mode='markers',
+        marker=dict(size=25, color='#333333'),
+        showlegend=False,
+        hoverinfo='skip'
+    ))
+
+    # 5. 下方文字資訊
+    # 標題
+    fig.add_trace(go.Scatter(
+        x=[0], y=[-0.2],
+        mode='text',
+        text=[clean_status],
+        textfont=dict(size=40, color=current_color, weight='bold', family='Arial Black'),
+        showlegend=False,
+        hoverinfo='skip'
+    ))
+    # 持續天數
+    fig.add_trace(go.Scatter(
+        x=[0], y=[-0.45],
+        mode='text',
+        text=[f"已持續 {streak_days} 天"],
+        textfont=dict(size=16, color="#888", family="Arial"),
+        showlegend=False,
+        hoverinfo='skip'
+    ))
+
+    # 6. 版面設定 (最關鍵的一步：鎖定長寬比)
+    fig.update_layout(
+        xaxis=dict(range=[-1.1, 1.1], visible=False, fixedrange=True), # X軸範圍
+        yaxis=dict(
+            range=[-0.5, 1.1], # Y軸範圍 (包含下方文字空間)
+            visible=False, 
+            scaleanchor="x",   # 【關鍵】鎖定 Y 軸比例跟隨 X 軸，保證是正圓
+            scaleratio=1,
+            fixedrange=True
+        ),
+        width=None, # 讓 Streamlit 自動決定寬度，但內容比例鎖定
+        height=300, # 設定固定高度
+        margin=dict(l=10, r=10, t=20, b=10),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)'
+    )
+
+    return fig
+
     
 # --- AI 分析函式 ---
 def ai_analyze_v86(image):
@@ -1189,8 +1499,9 @@ def show_dashboard():
     with st.expander("📊 大盤指數走勢圖 (點擊展開)", expanded=False):
         col_m1, col_m2 = st.columns([1, 4])
         with col_m1:
-            market_type = st.radio("選擇市場", ["上市", "上櫃"], horizontal=True)
-            market_period = st.selectbox("週期", ["1mo", "3mo", "6mo", "1y"], index=2, key="market_period")
+            # 修改這裡：加入 "比特幣", "乙太幣"
+            market_type = st.radio("選擇市場", ["上市", "上櫃", "比特幣", "乙太幣"], horizontal=True)
+            market_period = st.selectbox("週期", ["1mo", "3mo", "6mo", "1y", "2y", "5y"], index=2, key="market_period")
         with col_m2:
             fig, err = plot_market_index(market_type, market_period)
             if fig: st.plotly_chart(fig, use_container_width=True)
@@ -1202,36 +1513,70 @@ def show_dashboard():
     # 為了節省篇幅，請保留您原本 show_dashboard 函式中，st.divider() 之後的所有程式碼
     # --- 接續原本的程式碼 ---
     
-    # --- V196: 每日風度與風箏數 ---
+# --- V196: 每日風度與風箏數 (圖形化修正版) ---
     st.markdown("### 🌬️ 每日風度與風箏數")
 
     wind_status = day_data['wind']
     wind_streak = calculate_wind_streak(df, selected_date)
-    streak_text = f"已持續 {wind_streak} 天"
     
-    wind_color = "#2ecc71" 
-    if "強" in str(wind_status): wind_color = "#e74c3c"
-    elif "亂" in str(wind_status): wind_color = "#9b59b6"
-    elif "陣" in str(wind_status): wind_color = "#f1c40f"
+    # 使用 columns 佈局：左邊放儀表板 (寬度 1.3)，右邊放數據卡片 (寬度 2.7)
+    col_gauge, col_cards = st.columns([1.3, 2.7])
+    
+    with col_gauge:
+        # 呼叫剛剛新增的儀表板函式
+        gauge_fig = plot_wind_gauge(wind_status, wind_streak)
+        st.plotly_chart(gauge_fig, use_container_width=True, config={'displayModeBar': False})
 
-    st.markdown("""
-    <style>
-        div.metrics-grid { display: grid !important; grid-template-columns: repeat(2, 1fr) !important; gap: 15px !important; margin-bottom: 20px !important; width: 100% !important; }
-        @media (min-width: 768px) { div.metrics-grid { grid-template-columns: repeat(4, 1fr) !important; } }
-        div.metrics-grid .metric-box { background-color: #FFFFFF !important; border-radius: 12px !important; padding: 15px 10px !important; text-align: center !important; border-left: 1px solid #E0E0E0 !important; border-right: 1px solid #E0E0E0 !important; border-bottom: 1px solid #E0E0E0 !important; box-shadow: 0 2px 5px rgba(0,0,0,0.05) !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; min-height: 120px !important; margin: 0 !important; }
-        .m-label { font-size: 1.6rem; color: #666; font-weight: 600; margin-bottom: 5px; }
-        .m-value { font-size: 2.5rem; font-weight: 800; color: #2c3e50; margin: 0; line-height: 1.2; }
-        .m-sub { font-size: 0.9rem; color: #888; font-weight: bold; margin-top: 5px; }
-    </style>
-    """, unsafe_allow_html=True)
-
-    html_metrics = '<div class="metrics-grid">'
-    html_metrics += f'<div class="metric-box" style="border-top: 5px solid {wind_color} !important;"><div class="m-label">🍃 今日風向</div><div class="m-value">{wind_status}</div><div class="m-sub">{streak_text}</div></div>'
-    html_metrics += f'<div class="metric-box" style="border-top: 5px solid #f39c12 !important;"><div class="m-label">🪁 打工型風箏</div><div class="m-value">{day_data["part_time_count"]}</div></div>'
-    html_metrics += f'<div class="metric-box" style="border-top: 5px solid #3498db !important;"><div class="m-label">💪 上班族強勢週</div><div class="m-value">{day_data["worker_strong_count"]}</div></div>'
-    html_metrics += f'<div class="metric-box" style="border-top: 5px solid #9b59b6 !important;"><div class="m-label">📈 上班族週趨勢</div><div class="m-value">{day_data["worker_trend_count"]}</div></div>'
-    html_metrics += '</div>'
-    st.markdown(html_metrics, unsafe_allow_html=True)
+    with col_cards:
+        # 右側保留原本的數據卡片風格，但改為橫向排列
+        st.markdown("""
+        <style>
+            /* 右側卡片專用 Grid */
+            div.kite-metrics-grid { 
+                display: grid; 
+                grid-template-columns: repeat(3, 1fr); 
+                gap: 10px; 
+                height: 100%;
+                align-items: center;
+            }
+            @media (max-width: 768px) { div.kite-metrics-grid { grid-template-columns: 1fr; } }
+            
+            .kite-box { 
+                background-color: #FFFFFF; 
+                border-radius: 12px; 
+                padding: 15px 5px; 
+                text-align: center; 
+                border: 1px solid #E0E0E0; 
+                box-shadow: 0 2px 5px rgba(0,0,0,0.05); 
+                display: flex; 
+                flex-direction: column; 
+                justify-content: center; 
+                align-items: center; 
+                height: 140px; /* 固定高度讓視覺整齊 */
+            }
+            .k-label { font-size: 1.1rem; color: #666; font-weight: 600; margin-bottom: 8px; }
+            .k-value { font-size: 2.8rem; font-weight: 800; color: #2c3e50; line-height: 1.0; }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        # 數據卡片 HTML
+        cards_html = f"""
+        <div class="kite-metrics-grid">
+            <div class="kite-box" style="border-top: 5px solid #f39c12;">
+                <div class="k-label">🪁 打工型風箏</div>
+                <div class="k-value">{day_data["part_time_count"]}</div>
+            </div>
+            <div class="kite-box" style="border-top: 5px solid #3498db;">
+                <div class="k-label">💪 上班族強勢週</div>
+                <div class="k-value">{day_data["worker_strong_count"]}</div>
+            </div>
+            <div class="kite-box" style="border-top: 5px solid #9b59b6;">
+                <div class="k-label">📈 上班族週趨勢</div>
+                <div class="k-value">{day_data["worker_trend_count"]}</div>
+            </div>
+        </div>
+        """
+        st.markdown(cards_html, unsafe_allow_html=True)
 
     st.markdown('<div class="strategy-banner worker-banner"><p class="banner-text">👨‍💼 上班族策略 (Worker Strategy)</p></div>', unsafe_allow_html=True)
     w1, w2 = st.columns(2)
