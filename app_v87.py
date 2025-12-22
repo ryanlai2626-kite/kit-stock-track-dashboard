@@ -709,18 +709,18 @@ def get_cnn_fear_greed_full():
 
 def get_rating_label_cn(score):
     if score is None: return "未知", "#95a5a6"
-    if score < 25: return "極度恐懼", "#e74c3c" # Red
-    elif score < 45: return "恐懼", "#e67e22" # Orange
-    elif score <= 55: return "中立", "#95a5a6" # Gray
-    elif score < 75: return "貪婪", "#2ecc71" # Light Green
-    else: return "極度貪婪", "#27ae60" # Dark Green
+    if score < 25: return "極度恐懼", "#91cf60" # Red
+    elif score < 45: return "恐懼", "#d9ef8b" # Orange
+    elif score <= 55: return "中立", "#fee08b" # Gray
+    elif score < 75: return "貪婪", "#fc8d59" # Light Green
+    else: return "極度貪婪", "#d73027" # Dark Green
 
 import math
 import plotly.graph_objects as go
 
-# --- [V380 像素級復刻版] 精密圓弧文字排列 (Curved Text Perfection) ---
+# --- [V450 終極幾何版] 純角度計算 + 底部對齊 + 全域彎曲 ---
 def plot_fear_greed_gauge_dark(score):
-    # 1. 顏色定義 (參考圖片色系)
+    # 1. 顏色定義
     colors = {
         'extreme_fear': '#91cf60', # 深綠
         'fear': '#d9ef8b',         # 淺綠
@@ -743,22 +743,18 @@ def plot_fear_greed_gauge_dark(score):
 
     fig = go.Figure()
 
-    # --- 幾何參數 (依照圖片比例微調) ---
-    R_OUTER_LINE = 1.0   # 外圈實線
-    R_TICK_OUT = 0.95    # 刻度外緣
-    R_TICK_IN_MAJOR = 0.85 # 大刻度內緣
-    R_TICK_IN_MINOR = 0.90 # 小刻度內緣
-    R_LABEL = 1.12       # 文字標籤半徑 (緊貼外圈)
-    R_POINTER = 0.70     # 指針半徑
+    # --- 幾何參數 (更緊湊的佈局) ---
+    R_OUTER_LINE = 1.0
+    R_TICK_OUT = 0.96
+    R_TICK_IN_MAJOR = 0.85
+    R_TICK_IN_MINOR = 0.90
+    R_LABEL = 1.08      # 文字半徑 (拉近距離，緊貼刻度)
+    R_POINTER = 0.70
     
-    # 輔助函式：極座標轉直角座標
-    def get_pos_angle(r, val):
-        # 0=180度(左), 100=0度(右)
-        angle_deg = 180 - (val / 100) * 180
-        theta_rad = math.radians(angle_deg)
-        x = r * math.cos(theta_rad)
-        y = r * math.sin(theta_rad)
-        return x, y, angle_deg
+    # 輔助：從角度獲取座標
+    def get_xy_from_angle(r, angle_deg):
+        rad = math.radians(angle_deg)
+        return r * math.cos(rad), r * math.sin(rad)
 
     shapes = []
     
@@ -770,12 +766,15 @@ def plot_fear_greed_gauge_dark(score):
         (55, 75, colors['greed']),
         (75, 100, colors['extreme_greed'])
     ]
-    for start, end, col in segments:
+    for start_val, end_val, col in segments:
+        start_angle = 180 - (start_val / 100) * 180
+        end_angle = 180 - (end_val / 100) * 180
+        
         x_pts, y_pts = [], []
         steps = 30
         for i in range(steps + 1):
-            val = start + (end - start) * (i / steps)
-            x, y, _ = get_pos_angle(R_OUTER_LINE, val)
+            angle = start_angle + (end_angle - start_angle) * (i / steps)
+            x, y = get_xy_from_angle(R_OUTER_LINE, angle)
             x_pts.append(x)
             y_pts.append(y)
         fig.add_trace(go.Scatter(x=x_pts, y=y_pts, mode='lines', line=dict(color=col, width=6), hoverinfo='skip', showlegend=False))
@@ -785,67 +784,75 @@ def plot_fear_greed_gauge_dark(score):
         is_major = (i % 10 == 0)
         r_in = R_TICK_IN_MAJOR if is_major else R_TICK_IN_MINOR
         
-        # 刻度顏色邏輯
+        # 決定顏色
         if i < 25: t_col = colors['extreme_fear']
         elif i < 45: t_col = colors['fear']
         elif i <= 55: t_col = colors['neutral']
         elif i < 75: t_col = colors['greed']
         else: t_col = colors['extreme_greed']
         
-        x0, y0, _ = get_pos_angle(r_in, i)
-        x1, y1, _ = get_pos_angle(R_TICK_OUT, i)
+        angle = 180 - (i / 100) * 180
+        x0, y0 = get_xy_from_angle(r_in, angle)
+        x1, y1 = get_xy_from_angle(R_TICK_OUT, angle)
+        
         shapes.append(dict(type="line", x0=x0, y0=y0, x1=x1, y1=y1, line=dict(color=t_col, width=3 if is_major else 1), layer="above"))
 
-    # 4. 【文字標籤】：關鍵修正 (Perfectly Curved Text)
-    # 我們精確定義每個字的「數值位置 (Score Position)」，確保它們均勻分佈
+    # 4. 【文字標籤】：關鍵修正 (Angle-Based Placement)
+    # 直接指定每個詞彙的「中心角度」和「字間距角度」
+    # 這樣可以完全掌控文字在圓弧上的位置
     
-    # 定義每個字的配置： (文字內容, 起始分數, 字間距分數)
-    # 數值越小越靠左(下)，數值越大越靠右(下)
-    # 透過微調 start 和 step，讓文字完美貼合區間中心
-    text_configs = [
-        {"text": "極度恐懼", "start": 6,  "step": 4},   # 分佈在 6, 10, 14, 18 (0-25區間)
-        {"text": "恐懼",     "start": 33, "step": 4},   # 分佈在 33, 37 (25-45區間)
-        {"text": "中性",     "start": 48, "step": 4},   # 分佈在 48, 52 (45-55區間)
-        {"text": "貪婪",     "start": 63, "step": 4},   # 分佈在 63, 67 (55-75區間)
-        {"text": "極度貪婪", "start": 82, "step": 4}    # 分佈在 82, 86, 90, 94 (75-100區間)
+    labels_config = [
+        {"text": "極度恐懼", "center": 157.5, "spacing": 5.0}, # 左下 (疏一點)
+        {"text": "恐懼",     "center": 117.0, "spacing": 5.0}, # 左上
+        {"text": "中性",     "center": 90.0,  "spacing": 4.0}, # 頂部 (也要彎曲！)
+        {"text": "貪婪",     "center": 63.0,  "spacing": 5.0}, # 右上
+        {"text": "極度貪婪", "center": 22.5,  "spacing": 5.0}  # 右下
     ]
     
-    annotations = []
-    
-    for config in text_configs:
-        txt = config["text"]
-        start = config["start"]
-        step = config["step"]
+    for cfg in labels_config:
+        txt = cfg["text"]
+        center = cfg["center"]
+        spacing = cfg["spacing"]
+        
+        # 計算詞彙總跨度
+        total_span = (len(txt) - 1) * spacing
+        
+        # 起始角度 (順時針排列：從大角度開始)
+        # 例如中心 90，總跨度 4 -> 起始 92，結束 88
+        start_angle = center + total_span / 2
         
         for i, char in enumerate(txt):
-            # 計算該字的精確位置
-            pos_val = start + i * step
+            # 計算該字的精確角度
+            char_angle = start_angle - i * spacing
             
-            # 獲取座標與角度
-            lx, ly, angle_deg = get_pos_angle(R_LABEL, pos_val)
+            # 計算座標 (放置在 R_LABEL 圓弧上)
+            lx, ly = get_xy_from_angle(R_LABEL, char_angle)
             
-            # 計算旋轉：讓字底朝向圓心
-            # 公式：角度 - 90
-            rot = angle_deg - 90
+            # 【核心修正】旋轉角度
+            # angle - 90: 讓文字底部 (Bottom) 垂直指向圓心
+            rot = char_angle - 90
             
-            # 建立註釋 (比 Scatter text 定位更準)
-            annotations.append(dict(
-                x=lx, y=ly,
-                text=char,
+            # 使用 add_annotation 並鎖定 yanchor="bottom"
+            # 這樣 lx, ly 就是文字的「腳下」位置，完美貼合圓弧
+            fig.add_annotation(
+                x=lx, y=ly, 
+                text=char, 
                 showarrow=False,
                 font=dict(size=15, color="#E0E0E0", family="Microsoft JhengHei", weight="bold"),
                 textangle=rot,
-                xanchor="center", yanchor="middle"
-            ))
+                xanchor="center",
+                yanchor="bottom" # 關鍵：以底部為錨點
+            )
 
     # 5. 【懸浮指針】
-    p_cx, p_cy, ptr_angle = get_pos_angle(R_POINTER, score)
+    ptr_angle = 180 - (score / 100) * 180
     ptr_rad = math.radians(ptr_angle)
     tri_len, tri_w = 0.14, 0.05
-    tip_x = p_cx + math.cos(ptr_rad) * (tri_len * 0.6)
-    tip_y = p_cy + math.sin(ptr_rad) * (tri_len * 0.6)
-    base_cx = p_cx - math.cos(ptr_rad) * (tri_len * 0.4)
-    base_cy = p_cy - math.sin(ptr_rad) * (tri_len * 0.4)
+    
+    tip_x = R_POINTER * math.cos(ptr_rad) + math.cos(ptr_rad) * (tri_len * 0.6)
+    tip_y = R_POINTER * math.sin(ptr_rad) + math.sin(ptr_rad) * (tri_len * 0.6)
+    base_cx = R_POINTER * math.cos(ptr_rad) - math.cos(ptr_rad) * (tri_len * 0.4)
+    base_cy = R_POINTER * math.sin(ptr_rad) - math.sin(ptr_rad) * (tri_len * 0.4)
     dx = -math.sin(ptr_rad) * tri_w
     dy = math.cos(ptr_rad) * tri_w
     
@@ -858,29 +865,30 @@ def plot_fear_greed_gauge_dark(score):
     ))
 
     # 6. 【中心數字與狀態】
-    fig.add_trace(go.Scatter(
-        x=[0], y=[0.15], mode='text',
-        text=[f"{score}"],
-        textfont=dict(size=55, color=curr_color, family="Arial Black", weight=900),
-        showlegend=False, hoverinfo='skip'
-    ))
-    fig.add_trace(go.Scatter(
-        x=[0], y=[-0.15], mode='text',
-        text=[f"{curr_label}"],
-        textfont=dict(size=24, color="#FFFFFF", family="Microsoft JhengHei", weight=700),
-        showlegend=False, hoverinfo='skip'
-    ))
+    # 數字往上移一點，讓出空間
+    fig.add_annotation(
+        x=0, y=0.30,
+        text=f"{score}",
+        showarrow=False,
+        font=dict(size=40, color=curr_color, family="Arial Black", weight=900)
+    )
+    
+    fig.add_annotation(
+        x=0, y=-0.00,
+        text=f"{curr_label}",
+        showarrow=False,
+        font=dict(size=26, color="#FFFFFF", family="Microsoft JhengHei", weight=700)
+    )
 
     # 7. 版面設定
     fig.update_layout(
         shapes=shapes,
-        annotations=annotations,
-        xaxis=dict(range=[-1.4, 1.4], visible=False, fixedrange=True),
-        yaxis=dict(range=[-0.3, 1.4], visible=False, scaleanchor="x", scaleratio=1, fixedrange=True),
+        xaxis=dict(range=[-1.3, 1.3], visible=False, fixedrange=True),
+        yaxis=dict(range=[-0.2, 1.4], visible=False, scaleanchor="x", scaleratio=1, fixedrange=True),
         paper_bgcolor='#1a1a1a', 
         plot_bgcolor='#1a1a1a',
         height=320,
-        margin=dict(t=30, b=10, l=10, r=10),
+        margin=dict(t=40, b=10, l=10, r=10), # 增加頂部邊距防止切字
         template='plotly_dark'
     )
     
