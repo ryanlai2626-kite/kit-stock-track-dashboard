@@ -497,88 +497,65 @@ def make_sparkline_svg(data_list, color_hex, width=200, height=50):
 from datetime import datetime
 import pytz # 確保有導入時區庫，用於判斷台股日期
 
-# --- [新增] 強制爬取 Yahoo 網頁即時指數 (V185: 高相容性爬蟲版) ---
+# --- [V190 最終手段] 使用 Yahoo Chart API (JSON) 獲取最精準即時報價 ---
 def fetch_tw_index_from_web(ticker):
     """
-    針對 ^TWII 和 ^TWOII，直接爬取 Yahoo 奇摩股市網頁。
-    改進版：使用更靈活的正則表達式提取數字，不依賴特定分隔符。
+    不再解析 HTML，直接請求 Yahoo Finance 的 Chart API (JSON 格式)。
+    這是 Yahoo 前端圖表真正的資料來源，數據最即時且包含正確的昨收價。
     """
     try:
-        # 定義目標 URL
-        url_map = {
-            "^TWII": "https://tw.stock.yahoo.com/quote/^TWII",
-            "^TWOII": "https://tw.stock.yahoo.com/quote/^TWOII"
-        }
-        url = url_map.get(ticker)
-        if not url: return None
-
-        # 模擬真實瀏覽器 headers (非常重要，防止被擋)
+        # Yahoo Chart API 隱藏端點
+        # interval=1m 代表抓取 1 分鐘線，確保 meta data 是最新的
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1m&range=1d"
+        
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Referer": "https://tw.stock.yahoo.com/",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7"
+            "Referer": "https://finance.yahoo.com/",
+            "Origin": "https://finance.yahoo.com"
         }
         
-        # 發送請求
-        r = requests.get(url, headers=headers, timeout=5)
+        # 設定短超時，避免卡住
+        r = requests.get(url, headers=headers, timeout=3)
         
-        if r.status_code != 200:
-            print(f"Web fetch failed: Status {r.status_code}")
-            return None
-
-        # 策略 1: 嘗試抓取 Meta Tag (最快)
-        # 格式通常為: "櫃買指數 (TWOII) 265.55 ▲1.23 (+0.46%) - Yahoo!奇摩股市"
-        # 我們直接尋找 (TWOII) 或 (TWII) 後面的數字
-        
-        # 定義代號關鍵字
-        symbol_key = "TWOII" if "TWO" in ticker else "TWII"
-        
-        # 使用正則表達式尋找 og:title
-        match = re.search(r'<meta property="og:title" content="([^"]+)"', r.text)
-        if match:
-            content = match.group(1)
+        if r.status_code == 200:
+            data = r.json()
+            # 解析 JSON 結構
+            # 路徑: chart -> result -> [0] -> meta
+            meta = data['chart']['result'][0]['meta']
             
-            # 確保抓到的是對的商品
-            if symbol_key in content:
-                # 移除所有逗號 (千分位)，避免干擾數字解析
-                clean_content = content.replace(',', '')
-                
-                # 提取內容中所有的「浮點數」 (例如: 265.55, 1.23, 0.46)
-                # 邏輯：找尋 (數字.數字) 的模式
-                nums = re.findall(r'(\d+\.\d+)', clean_content)
-                
-                if len(nums) >= 3:
-                    price = float(nums[0])      # 第一個通常是價格
-                    change_val = float(nums[1]) # 第二個是漲跌值
-                    pct_val = float(nums[2])    # 第三個是幅度
-                    
-                    # 判斷正負號 (檢查是否包含「下」或「負」的符號)
-                    # Yahoo 常見跌符號: ▼, ▽, -
-                    is_down = any(s in content for s in ['▼', '▽', '-']) and not any(s in content for s in ['▲', '△', '+'])
-                    
-                    # 如果判斷是跌，且抓到的數字是正的，就手動轉負
-                    # 注意：有時候 regex 會把 -1.23 的 - 漏掉，所以這裡強制校正
-                    if is_down:
-                        change_val = -abs(change_val)
-                        pct_val = -abs(pct_val)
-                    else:
-                        change_val = abs(change_val)
-                        pct_val = abs(pct_val)
+            # 1. 抓取最新價格 (regularMarketPrice)
+            current_price = meta.get('regularMarketPrice')
+            
+            # 2. 抓取昨收價 (chartPreviousClose)
+            prev_close = meta.get('chartPreviousClose')
+            
+            # 雙重確認：如果 API 沒給 regularMarketPrice，嘗試拿最後一筆 Close
+            if current_price is None:
+                quotes = data['chart']['result'][0]['indicators']['quote'][0]
+                if 'close' in quotes and quotes['close']:
+                    # 過濾掉 None 值，取最後一個有效數字
+                    valid_closes = [c for c in quotes['close'] if c is not None]
+                    if valid_closes:
+                        current_price = valid_closes[-1]
 
-                    return {
-                        "price": price,
-                        "change": change_val,
-                        "pct_change": pct_val
-                    }
-
+            # 確保數據有效
+            if current_price is not None and prev_close is not None and prev_close > 0:
+                change_val = current_price - prev_close
+                pct_val = (change_val / prev_close) * 100
+                
+                return {
+                    "price": float(current_price),
+                    "change": float(change_val),
+                    "pct_change": float(pct_val)
+                }
+                
     except Exception as e:
-        print(f"Web fetch error for {ticker}: {e}")
+        print(f"API fetch error for {ticker}: {e}")
         return None
     return None
 
 
-# --- 全球市場即時報價 (V185: 網頁爬蟲混和版 - 高容錯) ---
+# --- 全球市場即時報價 (V190: JSON API 核心版) ---
 @st.cache_data(ttl=20)
 def get_global_market_data_with_chart():
     try:
@@ -598,18 +575,19 @@ def get_global_market_data_with_chart():
             try:
                 stock = yf.Ticker(ticker_code)
                 
-                # --- 1. 準備走勢圖數據 (依然使用 yfinance, 因為需要歷史序列) ---
+                # --- 1. 準備走勢圖數據 (Sparkline) ---
+                # 使用 yfinance 抓取歷史數據來畫線 (這部分 yfinance 很擅長)
                 is_crypto = "-USD" in ticker_code
                 interval = "15m" if is_crypto else "5m"
                 
                 # 嘗試抓取 1 天內的數據
                 hist_intra = stock.history(period="1d", interval=interval)
                 
-                # 如果沒資料，抓 5 天
+                # 如果資料太少 (例如剛開盤)，改抓 5 天 60分K
                 if hist_intra.empty or len(hist_intra) < 5:
                     hist_intra = stock.history(period="5d", interval="60m")
                 
-                # 如果還是沒資料，抓 1 個月日線
+                # 如果還是沒資料，抓 1 個月日線 (最後防線)
                 if hist_intra.empty:
                     hist_intra = stock.history(period="1mo", interval="1d")
 
@@ -620,39 +598,39 @@ def get_global_market_data_with_chart():
                 change = 0
                 pct_change = 0
                 
-                # 【策略 A】如果是台灣指數，優先使用網頁爬蟲 (Source of Truth)
+                # 【優先策略】針對台股，使用我們剛寫的 JSON API (最準)
                 if ticker_code in ["^TWII", "^TWOII"]:
-                    web_data = fetch_tw_index_from_web(ticker_code)
-                    if web_data and web_data['price'] > 0:
-                        last_price = web_data['price']
-                        change = web_data['change']
-                        pct_change = web_data['pct_change']
+                    api_data = fetch_tw_index_from_web(ticker_code)
+                    if api_data:
+                        last_price = api_data['price']
+                        change = api_data['change']
+                        pct_change = api_data['pct_change']
                 
-                # 【策略 B】如果不是台灣指數，或爬蟲失敗，使用 yfinance fast_info
+                # 【次要策略】如果 API 失敗 或 是國際指數，使用 yfinance fast_info
                 if last_price is None:
                     try:
                         fi = stock.fast_info
-                        if fi.last_price is not None:
+                        # 檢查 fast_info 是否有數據
+                        if fi.last_price is not None and fi.previous_close is not None:
                             last_price = float(fi.last_price)
                             prev_close = float(fi.previous_close)
                             change = last_price - prev_close
                             pct_change = (change / prev_close) * 100 if prev_close != 0 else 0
                     except: pass
 
-                # 【策略 C】如果 fast_info 也失敗 (極端狀況)，用歷史資料補
-                # 這是最後一道防線，雖然可能不準，但總比空白好
+                # 【最後防線】如果上面都失敗，只好用 K 線圖的最後一筆 (可能會導致漲跌為0，但至少有價格)
                 if last_price is None and not hist_intra.empty:
                     last_price = float(hist_intra.iloc[-1]['Close'])
+                    # 嘗試計算漲跌 (用開盤價當基準)
                     if len(hist_intra) >= 2:
-                        # 嘗試用開盤價當作基準來算漲跌，避免 0
                         prev = float(hist_intra.iloc[0]['Open']) 
                         change = last_price - prev
                         pct_change = (change / prev) * 100
 
-                # 最終檢查
+                # 最終檢查：如果還是沒有價格，就跳過此商品
                 if last_price is None: continue
 
-                # 顏色邏輯
+                # 3. 顏色與格式化
                 color_hex = "#DC2626" if change > 0 else ("#059669" if change < 0 else "#6B7280")
                 
                 market_data.append({
@@ -664,7 +642,7 @@ def get_global_market_data_with_chart():
                     "trend": trend_data
                 })
             except Exception as e:
-                print(f"Error {ticker_code}: {e}")
+                print(f"Error processing {ticker_code}: {e}")
                 continue
         return market_data
     except Exception as e:
@@ -2079,5 +2057,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
