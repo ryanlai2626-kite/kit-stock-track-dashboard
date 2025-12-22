@@ -859,7 +859,7 @@ def plot_fear_greed_gauge_dark(score):
         x=0, y=0.25,
         text=f"{score}",
         showarrow=False,
-        font=dict(size=40, color=curr_color, family="Arial Black", weight=900)
+        font=dict(size=36, color=curr_color, family="Arial Black", weight=900)
     )
     
     fig.add_annotation(
@@ -2206,6 +2206,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
