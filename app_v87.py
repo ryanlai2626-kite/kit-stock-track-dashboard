@@ -837,7 +837,7 @@ def plot_fear_greed_gauge_dark(score):
     # 5. 【懸浮指針】
     ptr_angle = 180 - (score / 100) * 180
     ptr_rad = math.radians(ptr_angle)
-    tri_len, tri_w = 0.14, 0.05
+    tri_len, tri_w = 0.12, 0.04
     
     tip_x = R_POINTER * math.cos(ptr_rad) + math.cos(ptr_rad) * (tri_len * 0.6)
     tip_y = R_POINTER * math.sin(ptr_rad) + math.sin(ptr_rad) * (tri_len * 0.6)
@@ -2206,5 +2206,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
