@@ -856,14 +856,14 @@ def plot_fear_greed_gauge_dark(score):
 
     # 6. 【中心數字與狀態】
     fig.add_annotation(
-        x=0, y=0.15,
+        x=0, y=0.25,
         text=f"{score}",
         showarrow=False,
-        font=dict(size=55, color=curr_color, family="Arial Black", weight=900)
+        font=dict(size=40, color=curr_color, family="Arial Black", weight=900)
     )
     
     fig.add_annotation(
-        x=0, y=-0.15,
+        x=0, y=-0.05,
         text=f"{curr_label}",
         showarrow=False,
         font=dict(size=24, color="#FFFFFF", family="Microsoft JhengHei", weight=700)
@@ -2206,4 +2206,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
