@@ -718,55 +718,51 @@ def get_rating_label_cn(score):
 import math
 import plotly.graph_objects as go
 
-# --- [V240 終極還原版] 仿圖設計：外圈實線 + 彩色刻度 + 懸浮指針 ---
+# --- [V380 像素級復刻版] 精密圓弧文字排列 (Curved Text Perfection) ---
 def plot_fear_greed_gauge_dark(score):
-    # 1. 顏色定義 (參考圖片色號)
+    # 1. 顏色定義 (參考圖片色系)
     colors = {
-        'extreme_fear': '#91cf60', # 深綠 (0-25) - 改亮一點以便在深色底顯示
-        'fear': '#d9ef8b',         # 淺綠 (25-45)
-        'neutral': '#fee08b',      # 黃色 (45-55)
-        'greed': '#fc8d59',        # 橘色 (55-75)
-        'extreme_greed': '#d73027' # 紅色 (75-100)
+        'extreme_fear': '#91cf60', # 深綠
+        'fear': '#d9ef8b',         # 淺綠
+        'neutral': '#fee08b',      # 黃色
+        'greed': '#fc8d59',        # 橘色
+        'extreme_greed': '#d73027' # 紅色
     }
     
-    # 輔助函式：根據數值獲取顏色
-    def get_color(val):
-        if val < 25: return colors['extreme_fear']
-        if val < 45: return colors['fear']
-        if val <= 55: return colors['neutral']
-        if val < 75: return colors['greed']
-        return colors['extreme_greed']
-
-    # 確定當前狀態顏色
-    current_color = get_color(score)
-    score_label = "未知"
-    if score < 25: score_label = "極度恐懼"
-    elif score < 45: score_label = "恐懼"
-    elif score <= 55: score_label = "中性"
-    elif score < 75: score_label = "貪婪"
-    else: score_label = "極度貪婪"
+    score = max(0, min(100, score))
+    if score < 25:
+        curr_color, curr_label = colors['extreme_fear'], "極度恐懼"
+    elif score < 45:
+        curr_color, curr_label = colors['fear'], "恐懼"
+    elif score <= 55:
+        curr_color, curr_label = colors['neutral'], "中性"
+    elif score < 75:
+        curr_color, curr_label = colors['greed'], "貪婪"
+    else:
+        curr_color, curr_label = colors['extreme_greed'], "極度貪婪"
 
     fig = go.Figure()
 
-    # --- 幾何參數 (精密調校) ---
-    R_LABEL = 1.20      # 文字標籤半徑
-    R_OUTER_LINE = 1.0  # 最外層實線半徑
-    R_TICK_OUT = 0.96   # 刻度外緣 (稍微與實線留點空隙)
-    R_TICK_IN_MAJOR = 0.82 # 大刻度內緣
-    R_TICK_IN_MINOR = 0.88 # 小刻度內緣
-    R_POINTER = 0.70    # 指針懸浮半徑
+    # --- 幾何參數 (依照圖片比例微調) ---
+    R_OUTER_LINE = 1.0   # 外圈實線
+    R_TICK_OUT = 0.95    # 刻度外緣
+    R_TICK_IN_MAJOR = 0.85 # 大刻度內緣
+    R_TICK_IN_MINOR = 0.90 # 小刻度內緣
+    R_LABEL = 1.12       # 文字標籤半徑 (緊貼外圈)
+    R_POINTER = 0.70     # 指針半徑
     
-    # 極座標轉直角座標
-    def get_xy(r, val):
-        # 0對應180度(PI), 100對應0度(0)
-        theta = math.pi * (1 - val / 100)
-        return r * math.cos(theta), r * math.sin(theta)
+    # 輔助函式：極座標轉直角座標
+    def get_pos_angle(r, val):
+        # 0=180度(左), 100=0度(右)
+        angle_deg = 180 - (val / 100) * 180
+        theta_rad = math.radians(angle_deg)
+        x = r * math.cos(theta_rad)
+        y = r * math.sin(theta_rad)
+        return x, y, angle_deg
 
     shapes = []
-    annotations = []
-
-    # 2. 【最外層】：彩色實線弧 (Continuous Colored Arc)
-    # 定義區間
+    
+    # 2. 【最外層】連續彩色實線
     segments = [
         (0, 25, colors['extreme_fear']),
         (25, 45, colors['fear']),
@@ -774,118 +770,117 @@ def plot_fear_greed_gauge_dark(score):
         (55, 75, colors['greed']),
         (75, 100, colors['extreme_greed'])
     ]
-    
     for start, end, col in segments:
-        # SVG Path 畫弧
-        x0, y0 = get_xy(R_OUTER_LINE, start)
-        x1, y1 = get_xy(R_OUTER_LINE, end)
-        # A rx ry x-axis-rotation large-arc-flag sweep-flag x y
-        path = f"M {x0} {y0} A {R_OUTER_LINE} {R_OUTER_LINE} 0 0 0 {x1} {y1}"
-        
-        shapes.append(dict(
-            type="path", path=path,
-            line=dict(color=col, width=5) # 實線寬度
-        ))
+        x_pts, y_pts = [], []
+        steps = 30
+        for i in range(steps + 1):
+            val = start + (end - start) * (i / steps)
+            x, y, _ = get_pos_angle(R_OUTER_LINE, val)
+            x_pts.append(x)
+            y_pts.append(y)
+        fig.add_trace(go.Scatter(x=x_pts, y=y_pts, mode='lines', line=dict(color=col, width=6), hoverinfo='skip', showlegend=False))
 
-    # 3. 【內層】：彩色刻度線 (Colored Ticks)
-    # 圖片特徵：刻度顏色 = 該區塊顏色
-    for i in range(0, 101, 2): # 每2分一格
-        is_major = (i % 10 == 0) # 每10分一大格
-        
-        # 決定內緣半徑 (大刻度比較長)
+    # 3. 【內層】彩色刻度線
+    for i in range(0, 101, 2):
+        is_major = (i % 10 == 0)
         r_in = R_TICK_IN_MAJOR if is_major else R_TICK_IN_MINOR
         
-        x0, y0 = get_xy(r_in, i)
-        x1, y1 = get_xy(R_TICK_OUT, i)
+        # 刻度顏色邏輯
+        if i < 25: t_col = colors['extreme_fear']
+        elif i < 45: t_col = colors['fear']
+        elif i <= 55: t_col = colors['neutral']
+        elif i < 75: t_col = colors['greed']
+        else: t_col = colors['extreme_greed']
         
-        # 關鍵：刻度顏色跟隨數值區間
-        tick_color = get_color(i)
-        
-        shapes.append(dict(
-            type="line",
-            x0=x0, y0=y0, x1=x1, y1=y1,
-            line=dict(color=tick_color, width=3 if is_major else 1)
-        ))
+        x0, y0, _ = get_pos_angle(r_in, i)
+        x1, y1, _ = get_pos_angle(R_TICK_OUT, i)
+        shapes.append(dict(type="line", x0=x0, y0=y0, x1=x1, y1=y1, line=dict(color=t_col, width=3 if is_major else 1), layer="above"))
 
-    # 4. 【文字標籤】：白色且清楚
-    label_positions = [
-        (12.5, "極度恐懼"), (35, "恐懼"), (50, "中性"), (65, "貪婪"), (87.5, "極度貪婪")
+    # 4. 【文字標籤】：關鍵修正 (Perfectly Curved Text)
+    # 我們精確定義每個字的「數值位置 (Score Position)」，確保它們均勻分佈
+    
+    # 定義每個字的配置： (文字內容, 起始分數, 字間距分數)
+    # 數值越小越靠左(下)，數值越大越靠右(下)
+    # 透過微調 start 和 step，讓文字完美貼合區間中心
+    text_configs = [
+        {"text": "極度恐懼", "start": 6,  "step": 4},   # 分佈在 6, 10, 14, 18 (0-25區間)
+        {"text": "恐懼",     "start": 33, "step": 4},   # 分佈在 33, 37 (25-45區間)
+        {"text": "中性",     "start": 48, "step": 4},   # 分佈在 48, 52 (45-55區間)
+        {"text": "貪婪",     "start": 63, "step": 4},   # 分佈在 63, 67 (55-75區間)
+        {"text": "極度貪婪", "start": 82, "step": 4}    # 分佈在 82, 86, 90, 94 (75-100區間)
     ]
-    for val, txt in label_positions:
-        lx, ly = get_xy(R_LABEL, val)
-        # 計算旋轉角度
-        angle = 180 - (val / 100) * 180
-        rot = 0
-        if angle > 90: rot = angle - 270
-        elif angle < 90: rot = 90 - angle
+    
+    annotations = []
+    
+    for config in text_configs:
+        txt = config["text"]
+        start = config["start"]
+        step = config["step"]
         
-        annotations.append(dict(
-            x=lx, y=ly, text=txt, showarrow=False,
-            # 字體加大並設為亮色
-            font=dict(size=16, color="#F0F0F0", family="Microsoft JhengHei", weight="bold"),
-            textangle=rot
-        ))
+        for i, char in enumerate(txt):
+            # 計算該字的精確位置
+            pos_val = start + i * step
+            
+            # 獲取座標與角度
+            lx, ly, angle_deg = get_pos_angle(R_LABEL, pos_val)
+            
+            # 計算旋轉：讓字底朝向圓心
+            # 公式：角度 - 90
+            rot = angle_deg - 90
+            
+            # 建立註釋 (比 Scatter text 定位更準)
+            annotations.append(dict(
+                x=lx, y=ly,
+                text=char,
+                showarrow=False,
+                font=dict(size=15, color="#E0E0E0", family="Microsoft JhengHei", weight="bold"),
+                textangle=rot,
+                xanchor="center", yanchor="middle"
+            ))
 
-    # 5. 【懸浮指針】：小小一根三角形
-    # 計算指針中心點
-    p_center_x, p_center_y = get_xy(R_POINTER, score)
-    
-    # 計算三角形頂點
-    # 指針方向角度
-    angle_rad = math.pi * (1 - score / 100)
-    
-    # 尺寸設定 (小小一根)
-    tri_len = 0.12  # 指針長度
-    tri_w = 0.04    # 指針寬度的一半
-    
-    # 尖端 (往外指)
-    tip_x = p_center_x + math.cos(angle_rad) * (tri_len / 2)
-    tip_y = p_center_y + math.sin(angle_rad) * (tri_len / 2)
-    
-    # 底部中心 (往內)
-    base_x = p_center_x - math.cos(angle_rad) * (tri_len / 2)
-    base_y = p_center_y - math.sin(angle_rad) * (tri_len / 2)
-    
-    # 底部兩角
-    # 垂直向量 (-sin, cos)
-    dx = -math.sin(angle_rad) * tri_w
-    dy = math.cos(angle_rad) * tri_w
-    
-    p1_x, p1_y = base_x + dx, base_y + dy
-    p2_x, p2_y = base_x - dx, base_y - dy
+    # 5. 【懸浮指針】
+    p_cx, p_cy, ptr_angle = get_pos_angle(R_POINTER, score)
+    ptr_rad = math.radians(ptr_angle)
+    tri_len, tri_w = 0.14, 0.05
+    tip_x = p_cx + math.cos(ptr_rad) * (tri_len * 0.6)
+    tip_y = p_cy + math.sin(ptr_rad) * (tri_len * 0.6)
+    base_cx = p_cx - math.cos(ptr_rad) * (tri_len * 0.4)
+    base_cy = p_cy - math.sin(ptr_rad) * (tri_len * 0.4)
+    dx = -math.sin(ptr_rad) * tri_w
+    dy = math.cos(ptr_rad) * tri_w
     
     fig.add_trace(go.Scatter(
-        x=[tip_x, p1_x, p2_x, tip_x],
-        y=[tip_y, p1_y, p2_y, tip_y],
-        fill='toself',
-        fillcolor=current_color, # 指針顏色跟隨狀態
-        line=dict(color=current_color, width=1),
-        mode='lines',
-        showlegend=False,
-        hoverinfo='skip'
+        x=[tip_x, base_cx + dx, base_cx - dx, tip_x],
+        y=[tip_y, base_cy + dy, base_cy - dy, tip_y],
+        fill='toself', fillcolor=curr_color,
+        line=dict(color=curr_color, width=1),
+        mode='lines', showlegend=False, hoverinfo='skip'
     ))
 
-    # 6. 【中心文字】：大數字 + 狀態
+    # 6. 【中心數字與狀態】
     fig.add_trace(go.Scatter(
-        x=[0], y=[0],
-        mode='text',
-        # 使用 HTML 語法讓數字變大，並上色
-        text=[f"<span style='font-size:70px; color:{current_color}'>{score}</span><br><span style='font-size:28px; color:#FFFFFF'>{score_label}</span>"],
-        textfont=dict(family="Arial"),
-        showlegend=False,
-        hoverinfo='skip'
+        x=[0], y=[0.15], mode='text',
+        text=[f"{score}"],
+        textfont=dict(size=55, color=curr_color, family="Arial Black", weight=900),
+        showlegend=False, hoverinfo='skip'
+    ))
+    fig.add_trace(go.Scatter(
+        x=[0], y=[-0.15], mode='text',
+        text=[f"{curr_label}"],
+        textfont=dict(size=24, color="#FFFFFF", family="Microsoft JhengHei", weight=700),
+        showlegend=False, hoverinfo='skip'
     ))
 
-    # 7. 版面設定 (黑底、鎖定比例)
+    # 7. 版面設定
     fig.update_layout(
         shapes=shapes,
         annotations=annotations,
         xaxis=dict(range=[-1.4, 1.4], visible=False, fixedrange=True),
-        yaxis=dict(range=[-0.2, 1.3], visible=False, scaleanchor="x", scaleratio=1, fixedrange=True),
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
+        yaxis=dict(range=[-0.3, 1.4], visible=False, scaleanchor="x", scaleratio=1, fixedrange=True),
+        paper_bgcolor='#1a1a1a', 
+        plot_bgcolor='#1a1a1a',
         height=320,
-        margin=dict(t=30, b=0, l=20, r=20),
+        margin=dict(t=30, b=10, l=10, r=10),
         template='plotly_dark'
     )
     
@@ -1007,24 +1002,25 @@ def render_global_markets():
     if fg_data and "error" in fg_data:
         st.warning(f"⚠️ 無法取得 CNN 即時數據 (原因: {fg_data['error']})。可能是因為雲端主機 IP 被新聞網站防火牆阻擋。建議稍後再試。")
     elif fg_data:
-        c1, c2 = st.columns([1, 1])
+
+	# 使用 columns 佈局
+        c1, c2 = st.columns([1.5, 2.5]) # 左邊寬一點給儀表板
         
         # 左側：儀表板
         with c1:
             # 🟩===【請貼上這段新程式碼】===🟩
-            
-	    # 1. 呼叫新的函式
             gauge_fig = plot_fear_greed_gauge_dark(fg_data['score'])
             
-            # 2. 【關鍵】建立一個深黑色背景容器 (#0e1117 是 Streamlit 預設深色模式的背景色，或用 #000000)
-            # 這樣白色的文字才能顯示出來
-            st.markdown("""
-                <div style="background-color:#0e1117; padding:10px; border-radius:15px; box-shadow: 0 4px 8px rgba(0,0,0,0.5); border: 1px solid #333; text-align: center;">
-            """, unsafe_allow_html=True)
+            # 【關鍵修正】直接設定一個深色卡片容器，確保背景是黑的
+            # 這樣白色的文字和刻度線才看得到
             
-            st.plotly_chart(gauge_fig, use_container_width=True)
+            # 畫圖
+            st.plotly_chart(gauge_fig, use_container_width=True, config={'displayModeBar': False})
             
+            # 閉合 DIV
             st.markdown("</div>", unsafe_allow_html=True)
+            
+        # 右側：歷史數據表 (保持原樣，或稍微美化)
             
             # 🟩===========================🟩
             
