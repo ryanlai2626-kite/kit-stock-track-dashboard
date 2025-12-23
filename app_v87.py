@@ -1365,13 +1365,10 @@ def calculate_monthly_stats(df):
     final_df = final_df.sort_values(['Month', 'Strategy', 'Count'], ascending=[False, True, False])
     return final_df
 
-import math
-import plotly.graph_objects as go
-
 def plot_wind_gauge_final_v6(wind_status, streak_days, tpex_data):
     """
-    V6 最終修正版 (Double Check):
-    強制將 Axis Zero Line 設為透明並將寬度設為0。
+    V6 最終修正版 (移除中心雜訊線條):
+    強制隱藏所有 Axis Zero Line, Grid, Ticks, 並關閉 Hover 效果。
     """
     
     # --- 1. 配色與樣式 ---
@@ -1424,7 +1421,7 @@ def plot_wind_gauge_final_v6(wind_status, streak_days, tpex_data):
     zones = [
         (0, 20, colors['no_wind'], "無風"),
         (20, 40, colors['gust'], "陣風"),
-        (40, 60, colors['boundary'], "交界"),
+        (40, 60, colors['boundary'], "循環交界"),
         (60, 80, colors['chaos'], "亂流"),
         (80, 100, colors['strong'], "強風")
     ]
@@ -1447,7 +1444,7 @@ def plot_wind_gauge_final_v6(wind_status, streak_days, tpex_data):
         lx, ly = get_xy(R_OUTER_LABEL, mid_angle)
         fig.add_annotation(
             x=lx, y=ly, text=label, showarrow=False,
-            font=dict(size=14, color=col, family="Microsoft JhengHei", weight="bold"),
+            font=dict(size=16, color=col, family="Microsoft JhengHei", weight="bold"),
             textangle=90 - mid_angle
         )
 
@@ -1458,13 +1455,13 @@ def plot_wind_gauge_final_v6(wind_status, streak_days, tpex_data):
         a = l_start + (l_end - l_start) * (i/20)
         x, y = get_xy(R_INNER_TRACK, a)
         lx_pts.append(x); ly_pts.append(y)
-    fig.add_trace(go.Scatter(x=lx_pts, y=ly_pts, mode='lines', line=dict(color=colors['cycle_safe'], width=4), hoverinfo='skip', showlegend=False))
+    fig.add_trace(go.Scatter(x=lx_pts, y=ly_pts, mode='lines', line=dict(color=colors['gust'], width=4), hoverinfo='skip', showlegend=False))
     
     l_text_angle = 144 
     lx, ly = get_xy(R_INNER_TEXT, l_text_angle)
     fig.add_annotation(
         x=lx, y=ly, text="無風/陣風循環", showarrow=False,
-        font=dict(size=12, color=colors['cycle_safe'], family="Microsoft JhengHei", weight="bold"),
+        font=dict(size=15, color=colors['gust'], family="Microsoft JhengHei", weight="bold"),
         textangle=90 - l_text_angle
     )
 
@@ -1480,7 +1477,7 @@ def plot_wind_gauge_final_v6(wind_status, streak_days, tpex_data):
     rx, ry = get_xy(R_INNER_TEXT, r_text_angle)
     fig.add_annotation(
         x=rx, y=ly, text="強風/亂流循環", showarrow=False,
-        font=dict(size=12, color=colors['cycle_risk'], family="Microsoft JhengHei", weight="bold"),
+        font=dict(size=15, color=colors['cycle_risk'], family="Microsoft JhengHei", weight="bold"),
         textangle=90 - r_text_angle
     )
 
@@ -1506,12 +1503,23 @@ def plot_wind_gauge_final_v6(wind_status, streak_days, tpex_data):
         x1, y1 = get_xy(R_TICKS_OUT, angle)
         shapes.append(dict(type="line", x0=x0, y0=y0, x1=x1, y1=y1, line=dict(color=tick_col, width=tick_w), layer="below"))
 
-    # --- 7. 懸浮指針 ---
+# --- 7. 懸浮指針 (已加大尺寸) ---
     ptr_angle = 180 - (final_score/100)*180
     ptr_rad = math.radians(ptr_angle)
-    p_tip_x = R_POINTER_TIP * math.cos(ptr_rad); p_tip_y = R_POINTER_TIP * math.sin(ptr_rad)
-    p_base_cx = R_POINTER_BASE * math.cos(ptr_rad); p_base_cy = R_POINTER_BASE * math.sin(ptr_rad)
-    w_rad = 0.025
+
+    # [調整 1] 若要讓指針更長，可以微調這兩個半徑
+    # R_POINTER_TIP 維持 0.90 或改 0.95 (指針尖端)
+    # R_POINTER_BASE 改為 0.70 (原 0.80，數字越小指針越長)
+    current_tip_r = 0.90 
+    current_base_r = 0.80
+
+    p_tip_x = current_tip_r * math.cos(ptr_rad); p_tip_y = current_tip_r * math.sin(ptr_rad)
+    p_base_cx = current_base_r * math.cos(ptr_rad); p_base_cy = current_base_r * math.sin(ptr_rad)
+    
+    # [調整 2] w_rad 控制指針的「寬度」
+    # 原本是 0.025，建議改為 0.05 或 0.06 會明顯變大
+    w_rad = 0.04
+    
     p_base_l_x = p_base_cx - w_rad * math.sin(ptr_rad); p_base_l_y = p_base_cy + w_rad * math.cos(ptr_rad)
     p_base_r_x = p_base_cx + w_rad * math.sin(ptr_rad); p_base_r_y = p_base_cy - w_rad * math.cos(ptr_rad)
 
@@ -1522,7 +1530,7 @@ def plot_wind_gauge_final_v6(wind_status, streak_days, tpex_data):
     elif final_score <= 80: curr_color = colors['chaos']
     else: curr_color = colors['strong']
 
-    fig.add_trace(go.Scatter(x=[p_tip_x, p_base_r_x, p_base_l_x, p_tip_x], y=[p_tip_y, p_base_r_y, p_base_l_y, p_tip_y], fill='toself', fillcolor=curr_color, line=dict(color=colors['pointer'], width=1.5), mode='lines', showlegend=False, hoverinfo='skip'))
+    fig.add_trace(go.Scatter(x=[p_tip_x, p_base_r_x, p_base_l_x, p_tip_x], y=[p_tip_y, p_base_r_y, p_base_l_y, p_tip_y], fill='toself', fillcolor=curr_color, line=dict(color=colors['pointer'], width=2), mode='lines', showlegend=False, hoverinfo='skip'))
 
     # --- 8. 中心文字數據 ---
     t_price = tpex_data.get('price', 0)
@@ -1531,33 +1539,37 @@ def plot_wind_gauge_final_v6(wind_status, streak_days, tpex_data):
     arrow = "▲" if t_change > 0 else ("▼" if t_change < 0 else "")
     p_color = colors['strong'] if t_change > 0 else (colors['no_wind'] if t_change < 0 else colors['text_main'])
     
-    fig.add_annotation(x=0, y=0.40, text="櫃買監控", font=dict(size=14, color=colors['text_sub'], family="Arial Black"))
-    fig.add_annotation(x=0, y=0.15, text=f"{t_price:,.2f}", font=dict(size=40, color=colors['text_main'], family="Arial Black"))
-    fig.add_annotation(x=0, y=-0.05, text=f"{arrow} {abs(t_change):.2f} ({abs(t_pct):.2f}%)", font=dict(size=16, color=p_color, weight="bold"))
-    fig.add_annotation(x=0, y=-0.25, text=f"狀態: {clean_status}", font=dict(size=20, color=curr_color, family="Arial Black", weight="bold"))
-    fig.add_annotation(x=0, y=-0.38, text=f"持續: {streak_days} 天", font=dict(size=14, color=colors['text_sub'], family="Arial Black"))
+    fig.add_annotation(x=0, y=0.40, text="櫃買監控", showarrow=False, font=dict(size=18, color=colors['text_sub'], family="Arial Black"))
+    fig.add_annotation(x=0, y=0.15, text=f"{t_price:,.2f}", showarrow=False, font=dict(size=30, color=colors['text_main'], family="Arial Black"))
+    fig.add_annotation(x=0, y=-0.05, text=f"{arrow} {abs(t_change):.2f} ({abs(t_pct):.2f}%)", showarrow=False, font=dict(size=18, color=p_color, weight="bold"))
+    fig.add_annotation(x=0, y=-0.25, text=f"狀態: {clean_status}", showarrow=False, font=dict(size=22, color=curr_color, family="Arial Black", weight="bold"))
+    fig.add_annotation(x=0, y=-0.38, text=f"持續: {streak_days} 天", showarrow=False, font=dict(size=16, color=colors['text_sub'], family="Arial Black"))
 
-    # --- 9. Layout (核彈級修正) ---
+    # --- 9. Layout (核彈級修正: 移除所有雜線) ---
     fig.update_layout(
         shapes=shapes,
         xaxis=dict(
-            range=[-1.3, 1.3], 
-            visible=False, 
-            showgrid=False, 
-            zeroline=False, 
-            showline=False,
-            zerolinewidth=0,               # [修正] 寬度設為0
-            zerolinecolor='rgba(0,0,0,0)', # [修正] 顏色完全透明
+            range=[-1.3, 1.3],
+            visible=False,        # 隱藏軸
+            showgrid=False,       # 隱藏格線
+            zeroline=False,       # 隱藏歸零線
+            showline=False,       # 隱藏軸線
+            showticklabels=False, # 隱藏刻度文字
+            ticks="",             # 移除刻度
+            showspikes=False,     # 移除懸浮刺針
+            zerolinecolor=colors['bg'], # 強制設為背景色 (雙保險)
             fixedrange=True
         ),
         yaxis=dict(
-            range=[-0.5, 1.3], 
-            visible=False, 
-            showgrid=False, 
-            zeroline=False, 
+            range=[-0.5, 1.3],
+            visible=False,
+            showgrid=False,
+            zeroline=False,
             showline=False,
-            zerolinewidth=0,               # [修正] 寬度設為0
-            zerolinecolor='rgba(0,0,0,0)', # [修正] 顏色完全透明
+            showticklabels=False,
+            ticks="",
+            showspikes=False,
+            zerolinecolor=colors['bg'], # 強制設為背景色 (雙保險)
             scaleanchor="x", 
             scaleratio=1, 
             fixedrange=True
@@ -1566,7 +1578,8 @@ def plot_wind_gauge_final_v6(wind_status, streak_days, tpex_data):
         plot_bgcolor=colors['bg'],
         height=400,
         margin=dict(t=50, b=10, l=20, r=20),
-        template='plotly_dark'
+        template='plotly_dark',
+        hovermode=False # 這裡最重要：完全關閉 Hover 避免出現十字線
     )
     
     return fig
