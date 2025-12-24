@@ -1713,6 +1713,89 @@ def get_tpex_robust():
 
     return tpex_data
 
+# ---計算指定月份的個股平均成交值
+
+@st.cache_data(ttl=300)
+def get_monthly_avg_turnover(stock_names, month_str):
+    """
+    計算指定月份的個股平均成交值
+    Args:
+        stock_names: 股票名稱列表 (e.g., ['台積電', '鴻海'])
+        month_str: 月份字串 (e.g., '2024-02')
+    Returns:
+        Dict: { '股票名稱': 平均成交值(億) }
+    """
+    if not stock_names: return {}
+    
+    # 1. 解析日期範圍
+    try:
+        dt = datetime.strptime(month_str, '%Y-%m')
+        start_date = dt.strftime('%Y-%m-%d')
+        # 計算下個月的第一天作為結束日期
+        if dt.month == 12:
+            end_date = datetime(dt.year + 1, 1, 1).strftime('%Y-%m-%d')
+        else:
+            end_date = datetime(dt.year, dt.month + 1, 1).strftime('%Y-%m-%d')
+    except:
+        return {}
+
+    # 2. 轉換名稱為代碼
+    code_map = {} # {code: name}
+    tickers = []
+    unique_names = list(set(stock_names))
+    
+    for name in unique_names:
+        # 假設 smart_get_code_and_sector 已經在您的程式碼中定義
+        code, _, _ = smart_get_code_and_sector(name)
+        if code:
+            tickers.append(f"{code}.TW")
+            tickers.append(f"{code}.TWO")
+            code_map[code] = name # 用代碼反查名稱
+
+    if not tickers: return {}
+
+    # 3. 批次下載歷史資料 (加速)
+    try:
+        data = yf.download(tickers, start=start_date, end=end_date, group_by='ticker', progress=False, threads=True)
+        result = {}
+        
+        for code, name in code_map.items():
+            avg_val = 0
+            # 嘗試上市或上櫃
+            for suffix in ['.TW', '.TWO']:
+                ticker = f"{code}{suffix}"
+                try:
+                    if isinstance(data.columns, pd.MultiIndex) and ticker in data.columns.levels[0]:
+                        df = data[ticker]
+                    elif len(tickers) == 1: # 只有一檔時 yfinance 結構不同
+                        df = data
+                    else:
+                        continue
+
+                    if not df.empty:
+                        # 計算每日成交值 = 收盤價 * 成交量 / 1億
+                        # 處理可能的 NaN
+                        df = df.dropna(subset=['Close', 'Volume'])
+                        if not df.empty:
+                            daily_turnover = (df['Close'] * df['Volume']) / 100000000
+                            avg_val = daily_turnover.mean()
+                            if avg_val > 0: break 
+                except: pass
+            
+            # 儲存結果 (保留一位小數)
+            if avg_val > 0:
+                result[name] = round(avg_val, 1)
+            else:
+                result[name] = 0.0
+                
+        return result
+    except Exception as e:
+        print(f"Error fetching monthly turnover: {e}")
+        return {}
+
+
+
+
 # --- 5. 頁面視圖：戰情儀表板 (前台) [含重新整理按鈕版] ---
 def show_dashboard():
     df = load_db()
@@ -2189,25 +2272,76 @@ def show_dashboard():
 
     st.header("🏆 策略選股月度風雲榜")
     st.caption("統計各策略下，股票出現的次數與所屬族群。")
+    
     stats_df = calculate_monthly_stats(df)
+    
     if not stats_df.empty:
         month_list = stats_df['Month'].unique()
         selected_month = st.selectbox("選擇統計月份", options=month_list)
+        
+        # 篩選月份
         filtered_stats = stats_df[stats_df['Month'] == selected_month]
+        
+        # --- [新增] 計算該月份所有出現股票的平均成交值 ---
+        with st.spinner("正在計算月均成交值..."):
+            all_unique_stocks = filtered_stats['stock'].unique().tolist()
+            # 呼叫上面新增的計算函式
+            monthly_turnover_map = get_monthly_avg_turnover(all_unique_stocks, selected_month)
+            
+            # 將成交值 map 回 dataframe
+            filtered_stats['AvgTurnover'] = filtered_stats['stock'].map(monthly_turnover_map).fillna(0)
+
         strategies_list = filtered_stats['Strategy'].unique()
-        cols1 = st.columns(3); cols2 = st.columns(3)
+        cols1 = st.columns(3)
+        cols2 = st.columns(3)
+        
         for i, strategy in enumerate(strategies_list):
+            # 取出該策略的前 10 名
             strat_data = filtered_stats[filtered_stats['Strategy'] == strategy].head(10)
-            col_config = {"stock": "股票名稱", "Count": st.column_config.ProgressColumn("出現次數", format="%d次", min_value=0, max_value=int(strat_data['Count'].max()) if not strat_data.empty else 1), "Industry": st.column_config.TextColumn("族群", help="所屬產業類別")}
-            if i < 3:
-                with cols1[i]:
-                    st.subheader(f"{strategy}")
-                    st.dataframe(strat_data[['stock', 'Count', 'Industry']], hide_index=True, use_container_width=True, column_config=col_config)
-            else:
-                with cols2[i-3]:
-                    st.subheader(f"{strategy}")
-                    st.dataframe(strat_data[['stock', 'Count', 'Industry']], hide_index=True, use_container_width=True, column_config=col_config)
-    else: st.info("累積足夠資料後，將在此顯示統計排行。")
+            
+            # 計算最大值用於進度條 (避免全空報錯)
+            max_count = int(strat_data['Count'].max()) if not strat_data.empty else 1
+            max_turnover = int(strat_data['AvgTurnover'].max()) if not strat_data.empty else 10
+            
+	# 設定欄位顯示格式
+            col_config = {
+                "stock": "股票名稱",
+                "Count": st.column_config.ProgressColumn(
+                    "次數", 
+                    format="%d次", 
+                    min_value=0, 
+                    max_value=max_count,
+                    help="該股票在這個月符合策略的次數",
+                ),
+                "AvgTurnover": st.column_config.NumberColumn(  # 改用 NumberColumn
+                    "月均成交(億)", 
+                    format="$%.1f億", 
+                    help="該月份的平均每日成交金額"
+                ),
+                "Industry": st.column_config.TextColumn("族群", help="所屬產業類別")
+            }
+
+	    # --- 樣式設定：嘗試將成交值置中 ---
+            # 注意：Streamlit 的數值欄位通常會強制靠右(財務標準)，若置中無效則為系統限制
+            styled_df = strat_data[['stock', 'Count', 'AvgTurnover', 'Industry']].style.set_properties(
+                subset=['AvgTurnover'], 
+                **{'text-align': 'center'}
+	    )
+
+            # 排版邏輯 (前3個在上排，後3個在下排)
+            target_col = cols1[i] if i < 3 else cols2[i-3]
+            
+            with target_col:
+                st.subheader(f"{strategy}")
+                # 顯示包含新欄位的 Dataframe
+                st.dataframe(
+                    strat_data[['stock', 'Count', 'AvgTurnover', 'Industry']], 
+                    hide_index=True, 
+                    use_container_width=True, 
+                    column_config=col_config
+                )
+    else: 
+        st.info("累積足夠資料後，將在此顯示統計排行。")
 
     st.markdown("---")
     st.header("🔥 今日市場重點監控 (權值股/熱門股 成交值排行)")
