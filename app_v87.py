@@ -882,7 +882,7 @@ def plot_fear_greed_gauge_dark(score):
         ),
         paper_bgcolor='#1a1a1a', 
         plot_bgcolor='#1a1a1a',
-        height=320,
+        height=300,
         margin=dict(t=30, b=10, l=10, r=10),
         template='plotly_dark'
     )
@@ -2684,3 +2684,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
