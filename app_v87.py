@@ -880,7 +880,7 @@ def plot_fear_greed_gauge_dark(score):
         ),
         paper_bgcolor='#1a1a1a', 
         plot_bgcolor='#1a1a1a',
-        height=360,
+        height=400,
         autosize=True, # 允許寬度自動調整
         margin=dict(t=30, b=10, l=10, r=10),
         template='plotly_dark'
@@ -1017,7 +1017,7 @@ def render_global_markets():
             # 這樣白色的文字和刻度線才看得到
             
             # 畫圖
-            st.plotly_chart(gauge_fig, use_container_width=True, config={'displayModeBar': False})
+            st.plotly_chart(gauge_fig, use_container_width=True, height=400, config={'displayModeBar': False})
             
             # 閉合 DIV
             st.markdown("</div>", unsafe_allow_html=True)
@@ -2198,7 +2198,7 @@ def show_dashboard():
         
         st.markdown('<div style="background-color:#1a1a1a; border-radius:15px; padding:5px; box-shadow:0 4px 6px rgba(0,0,0,0.3);">', unsafe_allow_html=True)
         # 加上 key 確保不重複渲染，config 設定 responsive
-        st.plotly_chart(gauge_fig, use_container_width=True, config={'displayModeBar': False, 'responsive': True}, key="main_gauge")
+        st.plotly_chart(gauge_fig, use_container_width=True, height=400, config={'displayModeBar': False, 'responsive': True}, key="main_gauge")
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col_cards:
