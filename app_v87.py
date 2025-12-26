@@ -26,107 +26,118 @@ st.set_page_config(layout="wide", page_title="StockTrack V158", page_icon="💰"
 
 st.markdown("""
 <style>
-    /* 全域設定 */
-    .stApp { background-color: #F0F2F6 !important; color: #333333 !important; font-family: 'Helvetica', 'Arial', sans-serif; }
-    h1, h2, h3, h4, h5, h6, p, div, span, label, li { color: #333333; }
+    /* --- 1. 全域與字體優化 --- */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
     
-    /* 標題區 */
-    .title-box { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); padding: 30px; border-radius: 15px; margin-bottom: 25px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.15); }
-    .title-box h1 { color: #FFFFFF !important; font-size: 36px !important; margin-bottom: 10px !important; }
-    .title-box p { color: #E0E0E0 !important; font-size: 18px !important; }
+    .stApp { 
+        background-color: #F8F9FA !important; 
+        color: #1F2937 !important; 
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important; 
+    }
     
-    /* 數據卡片 */
-    div.metric-container { background-color: #FFFFFF !important; border-radius: 12px; padding: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); text-align: center; border: 1px solid #E0E0E0; border-top: 5px solid #3498db; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 140px; margin-bottom: 10px; }
-    .metric-value { font-size: 2.8rem !important; font-weight: 800; color: #2c3e50 !important; margin: 5px 0; }
-    .metric-label { font-size: 1.3rem !important; color: #666666 !important; font-weight: 600; }
-    .metric-sub { font-size: 1.1rem !important; color: #888888 !important; font-weight: bold; margin-top: 5px; }
+    /* 標題與文字顏色 */
+    h1, h2, h3, h4, h5, h6 { color: #111827 !important; font-weight: 800 !important; letter-spacing: -0.02em; }
+    p, div, span, label, li { color: #374151; }
     
-    /* 全球指數卡片 */
-    .market-card { background-color: #FFFFFF; border-radius: 10px; padding: 15px; margin: 5px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.08); border: 1px solid #EAEAEA; transition: transform 0.2s; }
-    .market-card:hover { transform: translateY(-3px); box-shadow: 0 4px 8px rgba(0,0,0,0.12); }
-    .market-name { font-size: 1.0rem; font-weight: bold; color: #555; margin-bottom: 5px; }
-    .market-price { font-size: 1.8rem; font-weight: 900; margin: 5px 0; font-family: 'Roboto', sans-serif; }
-    .market-change { font-size: 1.1rem; font-weight: 700; }
-    .up-color { color: #e74c3c !important; } .down-color { color: #27ae60 !important; } .flat-color { color: #7f8c8d !important; }
-    .card-up { border-bottom: 4px solid #e74c3c; background: linear-gradient(to bottom, #fff, #fff5f5); }
-    .card-down { border-bottom: 4px solid #27ae60; background: linear-gradient(to bottom, #fff, #f0fdf4); }
-    .card-flat { border-bottom: 4px solid #95a5a6; }
-    
-    /* 趨勢定義卡片 (V153: 縮小優化版) */
-    .trend-card {
-        border-radius: 12px; /* 稍微減小圓角 */
-        padding: 10px;       /* 減少內距 (原本20px) */
-        color: white !important;
-        margin: 5px;
-        box-shadow: 0 3px 8px rgba(0,0,0,0.1);
-        display: flex;
+    /* --- 2. 頂部標題區 (現代化漸層) --- */
+    .title-box { 
+        background: white;
+        border-bottom: 1px solid #E5E7EB;
+        padding: 20px 20px; 
+        margin-bottom: 25px; 
+        text-align: left; /* 改為靠左，更符合現代儀表板 */
+        border-radius: 0 0 16px 16px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    }
+    .title-box h1 { font-size: 28px !important; margin-bottom: 5px !important; background: -webkit-linear-gradient(45deg, #2563EB, #1D4ED8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .title-box p { color: #6B7280 !important; font-size: 14px !important; margin: 0; }
+
+    /* --- 3. 數據卡片 (Metric Container) --- */
+    div.metric-container { 
+        background-color: #FFFFFF !important; 
+        border-radius: 16px; 
+        padding: 16px; 
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1); 
+        text-align: center; 
+        border: 1px solid #F3F4F6; 
+        /* 取消原本粗重的 border-top，改用內斂的標示 */
+        position: relative;
+        overflow: hidden;
+        transition: all 0.2s ease;
+    }
+    div.metric-container:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+    /* 用偽元素做顏色條，更細緻 */
+    div.metric-container::before {
+        content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+        background: var(--card-color, #E5E7EB); /* 預設灰 */
+    }
+    .metric-value { font-size: 2.2rem !important; font-weight: 800; color: #111827 !important; margin: 8px 0; letter-spacing: -0.05em; }
+    .metric-label { font-size: 0.95rem !important; color: #6B7280 !important; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+    .metric-sub { font-size: 0.9rem !important; color: #9CA3AF !important; font-weight: 500; }
+
+    /* --- 4. 股票標籤 (Chips Style) --- */
+    .stock-tag { 
+        display: inline-flex; 
         flex-direction: column;
         align-items: center;
-        text-align: center;
-        height: 100%;
-        transition: transform 0.2s;
-    }
-    .trend-card:hover { transform: scale(1.02); }
-    .trend-icon { font-size: 2.0rem; margin-bottom: 5px; text-shadow: 0 1px 2px rgba(0,0,0,0.2); } /* 縮小 ICON (3rem -> 2rem) */
-    .trend-title { font-size: 1.8rem !important; font-weight: 800 !important; margin-bottom: 5px !important; color: white !important; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
-    .trend-desc { font-size: 1.2rem !important; font-weight: 500 !important; line-height: 1.4; color: rgba(255,255,255,0.95) !important; }
-    
-    /* 漸層背景 */
-    .bg-strong { background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%); } /* 紅色系 */
-    .bg-chaos { background: linear-gradient(135deg, #834d9b 0%, #d04ed6 100%); } /* 紫色系 */
-    .bg-weak { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }   /* 綠色系 */
-
-    /* 股票標籤 */
-    .stock-tag { 
-        display: inline-block; background-color: #FFFFFF; color: #2c3e50 !important; 
-        border: 2px solid #bdc3c7; padding: 10px 18px; margin: 8px; 
-        border-radius: 10px; font-weight: 800; font-size: 1.6rem; 
-        box-shadow: 0 3px 6px rgba(0,0,0,0.1); 
+        justify-content: center;
+        background-color: #FFFFFF; 
+        color: #1F2937 !important; 
+        border: 1px solid #E5E7EB; /* 細邊框 */
+        padding: 8px 16px; 
+        margin: 6px; 
+        border-radius: 12px; 
+        font-weight: 700; 
+        font-size: 1.1rem; 
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05); 
         vertical-align: middle;
-        text-align: center;
-        min-width: 140px;
+        min-width: 100px;
+        transition: background 0.2s;
     }
-    .stock-tag-cb { background-color: #fff8e1; border-color: #f1c40f; color: #d35400 !important; }
-    .cb-badge { background-color: #e67e22; color: #FFFFFF !important; font-size: 0.6em; padding: 2px 6px; border-radius: 4px; margin-left: 5px; vertical-align: text-top; }
+    .stock-tag:hover { background-color: #F9FAFB; border-color: #D1D5DB; }
     
-    /* 成交值顯示 */
+    .stock-tag-cb { background-color: #FFFBEB; border-color: #FCD34D; color: #92400E !important; }
+    .cb-badge { background-color: #F59E0B; color: white !important; font-size: 0.6em; padding: 2px 6px; border-radius: 99px; margin-left: 4px; vertical-align: top; }
+    
     .turnover-val {
-        display: block;
-        font-size: 0.8em;
-        font-weight: 900;
-        color: #d35400; 
-        margin-top: 4px;
-        padding-top: 4px;
-        border-top: 1px dashed #ccc;
-        font-family: 'Arial', sans-serif;
+        display: block; font-size: 0.75em; font-weight: 600; color: #6B7280; 
+        margin-top: 2px; padding-top: 2px; border-top: 1px solid #F3F4F6; width: 100%; text-align: center;
     }
 
-    .stDataFrame table { text-align: center !important; }
-    .stDataFrame th { font-size: 18px !important; color: #000000 !important; background-color: #E6E9EF !important; text-align: center !important; font-weight: 900 !important; }
-    .stDataFrame td { font-size: 18px !important; color: #333333 !important; background-color: #FFFFFF !important; text-align: center !important; }
+    /* --- 5. 策略 Banner (簡化版) --- */
+    .strategy-banner { 
+        padding: 12px 20px; 
+        border-radius: 12px; 
+        margin-top: 30px; 
+        margin-bottom: 15px; 
+        display: flex; 
+        align-items: center; 
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
+    }
+    .banner-text { color: #FFFFFF !important; font-size: 1.2rem !important; font-weight: 700 !important; margin: 0 !important; letter-spacing: 0.02em; }
+    .worker-banner { background: linear-gradient(135deg, #3B82F6, #2563EB); }
+    .boss-banner { background: linear-gradient(135deg, #EF4444, #DC2626); }
+    .revenue-banner { background: linear-gradient(135deg, #F97316, #EA580C); }
+
+    /* --- 6. 全球指數與趨勢卡片 (Mobile Scroll) --- */
+    /* 這部分您原本的 CSS 已經做得很好 (.market-dashboard-grid)，這裡微調間距 */
+    .market-dashboard-grid { gap: 12px; padding: 10px 5px; }
     
-    .strategy-banner { padding: 15px 25px; border-radius: 8px; margin-top: 35px; margin-bottom: 20px; display: flex; align-items: center; box-shadow: 0 3px 6px rgba(0,0,0,0.15); }
-    .banner-text { color: #FFFFFF !important; font-size: 24px !important; font-weight: 800 !important; margin: 0 !important; }
-    .worker-banner { background: linear-gradient(90deg, #2980b9, #3498db); }
-    .boss-banner { background: linear-gradient(90deg, #c0392b, #e74c3c); }
-    .revenue-banner { background: linear-gradient(90deg, #d35400, #e67e22); }
+    /* --- 7. 表格優化 --- */
+    .stDataFrame { border: 1px solid #E5E7EB; border-radius: 8px; overflow: hidden; }
+    .stDataFrame th { background-color: #F9FAFB !important; color: #4B5563 !important; font-weight: 600 !important; }
     
-    /* 下拉選單修正 */
-    button[data-baseweb="tab"] { background-color: #FFFFFF !important; border: 1px solid #ddd !important; }
-    button[data-baseweb="tab"][aria-selected="true"] { background-color: #e3f2fd !important; border-bottom: 4px solid #3498db !important; }
-    .stSelectbox label { font-size: 18px !important; color: #333333 !important; font-weight: bold !important; }
-    .stSelectbox div[data-baseweb="select"] > div { background-color: #2c3e50 !important; color: white !important; }
-    .stSelectbox div[data-baseweb="select"] > div * { color: #FFFFFF !important; }
-    .stSelectbox div[data-baseweb="select"] svg { fill: #FFFFFF !important; color: #FFFFFF !important; }
-    li[role="option"] { background-color: #2c3e50 !important; color: #FFFFFF !important; }
-    li[role="option"]:hover { background-color: #34495e !important; color: #f1c40f !important; }
-    
-    /* 恐懼貪婪表格 */
-    .fg-history-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #eee; font-size: 14px; }
-    .fg-label { color: #666; font-weight: bold; }
-    .fg-val-box { padding: 2px 8px; border-radius: 4px; color: white; font-weight: bold; font-size: 14px; min-width: 40px; text-align: center; }
-    
-    #MainMenu {visibility: hidden;} footer {visibility: hidden;}
+    /* --- 8. 手機版特別優化 (@media) --- */
+    @media (max-width: 768px) {
+        .title-box { padding: 15px; text-align: center; }
+        .title-box h1 { font-size: 22px !important; }
+        .metric-value { font-size: 1.8rem !important; }
+        .stock-tag { width: 45%; margin: 2%; min-width: auto; } /* 手機上變兩欄 */
+        .strategy-banner { margin-top: 20px; padding: 10px 15px; }
+        .banner-text { font-size: 1.1rem !important; }
+        /* 強制隱藏不需要的 Plotly 工具列佔位 */
+        .modebar { display: none !important; }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1212,10 +1223,12 @@ def plot_market_index(index_type='上市', period='6mo'):
     except Exception as e: return None, f"繪圖錯誤: {str(e)}"
 
 # --- UI 輔助函數 ---
+# 修改 render_metric_card 函式
 def render_metric_card(col, label, value, color_border="gray", sub_value=""):
     sub_html = f'<div class="metric-sub">{sub_value}</div>' if sub_value else ""
+    # 使用 CSS variable (--card-color) 傳遞顏色
     col.markdown(f"""
-    <div class="metric-container" style="border-top: 5px solid {color_border};">
+    <div class="metric-container" style="--card-color: {color_border};">
         <div class="metric-label">{label}</div>
         <div class="metric-value">{value}</div>
         {sub_html}
@@ -1594,10 +1607,10 @@ def plot_wind_gauge_bias_driven(
         paper_bgcolor='#1a1a1a', 
         plot_bgcolor='#1a1a1a',
         
-        height=380,
+        height=350,
         
         # 【修改 2】極窄邊距，讓圖表在橫式手機畫面中盡量撐開，不被壓縮
-        margin=dict(t=5, b=5, l=5, r=5),
+        margin=dict(t=30, b=10, l=10, r=10),
         
         template='plotly_dark'
     )
@@ -2172,76 +2185,74 @@ def show_dashboard():
 
     # --- 2. 繪製雙指針儀表板 ---
     # 使用 columns 佈局：左邊放儀表板 (寬度 1.5)，右邊放數據卡片 (寬度 2.5)
-    col_gauge, col_cards = st.columns([1.5, 2.5]) 
+# --- 2. 繪製雙指針儀表板 ---
+    st.subheader("🌬️ 市場風向球 (Wind Gauge)") # 加個明確的小標題
+    
+    # 電腦版：左(圖) 4 : 右(數據) 3 -> 給圖更多空間
+    col_gauge, col_cards = st.columns([1.3, 1]) 
     
     with col_gauge:
-        # 呼叫新的 V4.0 繪圖函式 (傳入 8 個參數)
         gauge_fig = plot_wind_gauge_bias_driven(
-            taiex_w_status, taiex_w_streak, taiex_w_bias,  # 加權數據
-            tpex_w_status, tpex_w_streak, tpex_w_bias,     # 櫃買數據
-            taiex, tpex_info                               # 即時報價 dict
+            taiex_w_status, taiex_w_streak, taiex_w_bias, 
+            tpex_w_status, tpex_w_streak, tpex_w_bias,    
+            taiex, tpex_info                              
         )
-        
-        # 容器包覆
-        st.markdown('<div style="background-color:#1a1a1a; border-radius:15px; padding:10px; box-shadow:0 4px 6px rgba(0,0,0,0.3);">', unsafe_allow_html=True)
+        # 移除過多的 padding，讓圖盡量大
+        st.markdown('<div style="background-color:#1a1a1a; border-radius:16px; overflow:hidden; box-shadow:0 4px 10px rgba(0,0,0,0.2);">', unsafe_allow_html=True)
+        # config={'displayModeBar': False, 'staticPlot': True} -> staticPlot 在手機上可以防止誤觸縮放，但會失去互動
         st.plotly_chart(gauge_fig, use_container_width=True, config={'displayModeBar': False})
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col_cards:
-        # 右側保持原本的數據卡片風格 (不變)
+        # 右側卡片使用 Flex 排版，在手機上自動換行會比較好看
         st.markdown("""
         <style>
-            /* 右側卡片專用 Grid */
-            div.kite-metrics-grid { 
-                display: grid; 
-                grid-template-columns: repeat(3, 1fr); 
-                gap: 10px; 
+            .kite-metrics-container {
+                display: flex;
+                flex-direction: column; /* 電腦版垂直排列 */
+                gap: 15px;
                 height: 100%;
-                align-items: center;
+                justify-content: center;
             }
-            @media (max-width: 768px) { div.kite-metrics-grid { grid-template-columns: 1fr; } }
-            
-            .kite-box { 
-                background-color: #FFFFFF; 
-                border-radius: 12px; 
-                padding: 15px 5px; 
-                text-align: center; 
-                border: 1px solid #E0E0E0; 
-                box-shadow: 0 2px 5px rgba(0,0,0,0.05); 
-                display: flex; 
-                flex-direction: column; 
-                justify-content: center; 
-                align-items: center; 
-                height: 140px; 
+            @media (max-width: 768px) {
+                .kite-metrics-container {
+                    flex-direction: row; /* 手機版改為橫向排列 (3個並排) */
+                    margin-top: 15px;
+                }
             }
-            .k-label { font-size: 1.1rem; color: #666; font-weight: 600; margin-bottom: 8px; }
-            .k-value { font-size: 2.8rem; font-weight: 800; color: #2c3e50; line-height: 1.0; }
         </style>
         """, unsafe_allow_html=True)
         
-        # 數據卡片 HTML
+        # 這裡不使用 st.columns，改用純 HTML flex 佈局，讓他在手機上能變成橫的
         cards_html = f"""
-        <div class="kite-metrics-grid">
-            <div class="kite-box" style="border-top: 5px solid #f39c12;">
-                <div class="k-label">🪁 打工型風箏</div>
-                <div class="k-value">{day_data["part_time_count"]}</div>
+        <div class="kite-metrics-container">
+            <div class="metric-container" style="--card-color: #f39c12;">
+                <div class="metric-label">🪁 打工型</div>
+                <div class="metric-value">{day_data["part_time_count"]}</div>
             </div>
-            <div class="kite-box" style="border-top: 5px solid #3498db;">
-                <div class="k-label">💪 上班族強勢週</div>
-                <div class="k-value">{day_data["worker_strong_count"]}</div>
+            <div class="metric-container" style="--card-color: #3498db;">
+                <div class="metric-label">💪 強勢週</div>
+                <div class="metric-value">{day_data["worker_strong_count"]}</div>
             </div>
-            <div class="kite-box" style="border-top: 5px solid #9b59b6;">
-                <div class="k-label">📈 上班族週趨勢</div>
-                <div class="k-value">{day_data["worker_trend_count"]}</div>
+            <div class="metric-container" style="--card-color: #9b59b6;">
+                <div class="metric-label">📈 週趨勢</div>
+                <div class="metric-value">{day_data["worker_trend_count"]}</div>
             </div>
         </div>
         """
         st.markdown(cards_html, unsafe_allow_html=True)
 
-    st.markdown('<div class="strategy-banner worker-banner"><p class="banner-text">👨‍💼 上班族策略 (Worker Strategy)</p></div>', unsafe_allow_html=True)
-    w1, w2 = st.columns(2)
-    with w1: st.markdown("### 🚀 強勢週 TOP 3"); st.markdown(render_stock_tags_v113(day_data['worker_strong_list'], turnover_map), unsafe_allow_html=True)
-    with w2: st.markdown("### 📈 週趨勢"); st.markdown(render_stock_tags_v113(day_data['worker_trend_list'], turnover_map), unsafe_allow_html=True)
+    # 移除 st.columns(2)，讓手機版自動流式排版，或保持兩欄但允許擠壓
+    # 建議：若股票數量不多，兩欄OK。若多，建議直接上下排。
+    # 這裡示範保留兩欄，但加入 gap
+    w1, w2 = st.columns(2, gap="medium") 
+    
+    with w1: 
+        st.markdown("##### 🚀 強勢週 TOP 3") # 標題縮小一點，用 h5
+        st.markdown(render_stock_tags_v113(day_data['worker_strong_list'], turnover_map), unsafe_allow_html=True)
+    with w2: 
+        st.markdown("##### 📈 週趨勢")
+        st.markdown(render_stock_tags_v113(day_data['worker_trend_list'], turnover_map), unsafe_allow_html=True)
 
     st.markdown('<div class="strategy-banner boss-banner"><p class="banner-text">👑 老闆策略 (Boss Strategy)</p></div>', unsafe_allow_html=True)
     b1, b2 = st.columns(2)
