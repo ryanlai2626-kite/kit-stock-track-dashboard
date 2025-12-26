@@ -869,7 +869,7 @@ def plot_fear_greed_gauge_dark(score):
             fixedrange=True
         ),
         yaxis=dict(
-            range=[-0.4, 1.2], 
+            range=[-0.3, 1.4], 
             visible=False, 
             showgrid=False, 
             zeroline=False, 
@@ -881,7 +881,7 @@ def plot_fear_greed_gauge_dark(score):
         ),
         paper_bgcolor='#1a1a1a', 
         plot_bgcolor='#1a1a1a',
-        height=300,
+        height=400,
         margin=dict(t=30, b=10, l=10, r=10),
         template='plotly_dark'
     )
@@ -1590,11 +1590,11 @@ def plot_wind_gauge_bias_driven(
     # Layout (高度增加至 400 以容納底部文字，背景一致)
     fig.update_layout(
         shapes=shapes,
-        xaxis=dict(range=[-1.6, 1.6], visible=False, fixedrange=True),
-        yaxis=dict(range=[-0.5, 1.3], visible=False, scaleratio=1, fixedrange=True),
+        xaxis=dict(range=[-1.5, 1.5], visible=False, fixedrange=True),
+        yaxis=dict(range=[-0.5, 1.4], visible=False, scaleratio=1, fixedrange=True),
         paper_bgcolor='#1a1a1a', 
         plot_bgcolor='#1a1a1a',
-        height=320, # 稍微加高
+        height=400, # 稍微加高
         margin=dict(t=10, b=10, l=10, r=10),
         template='plotly_dark'
     )
@@ -2687,11 +2687,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
