@@ -1407,7 +1407,7 @@ def plot_wind_gauge_bias_driven(
     
     # 定義指針顏色 (固定顏色以利區分)
     COLOR_TAIEX_PTR = "#29B6F6"  # 淺藍色 (加權)
-    COLOR_TPEX_PTR  = "#fc8d59"  # 黃色 (櫃買)
+    COLOR_TPEX_PTR  = "#FFFF77"  # 黃色 (櫃買)
 
     # --- 內部函式：計算指針分數 ---
     def calc_score(bias_rate, streak_days):
@@ -1584,15 +1584,21 @@ def plot_wind_gauge_bias_driven(
     fig.add_annotation(x=0.45, y=-0.20, text=f"持續 {tpex_streak} 天", showarrow=False, font=dict(size=12.5, color="#AAAAAA"))
     #fig.add_annotation(x=0.45, y=-0.35, text=f"乖離 {tpex_bias}%", showarrow=False, font=dict(size=12, color="#666666"))
 
-    # 10. Layout
+    # 9. Layout (重點修改區)
     fig.update_layout(
         shapes=shapes,
         xaxis=dict(range=[-1.5, 1.5], visible=False, fixedrange=True),
         yaxis=dict(range=[-0.5, 1.4], visible=False, scaleanchor="x", scaleratio=1, fixedrange=True),
-        paper_bgcolor='#0F0F0F',
-        plot_bgcolor='#0F0F0F',
+        
+        # 【修改 1】背景色改為 #1a1a1a，與外層容器一致，消除黑槓
+        paper_bgcolor='#1a1a1a', 
+        plot_bgcolor='#1a1a1a',
+        
         height=380,
-        margin=dict(t=20, b=20, l=10, r=10),
+        
+        # 【修改 2】極窄邊距，讓圖表在橫式手機畫面中盡量撐開，不被壓縮
+        margin=dict(t=5, b=5, l=5, r=5),
+        
         template='plotly_dark'
     )
     
