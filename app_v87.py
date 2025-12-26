@@ -869,7 +869,7 @@ def plot_fear_greed_gauge_dark(score):
             fixedrange=True
         ),
         yaxis=dict(
-            range=[-0.3, 1.4], 
+            range=[-0.3, 1.3], 
             visible=False, 
             showgrid=False, 
             zeroline=False, 
@@ -2687,6 +2687,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
