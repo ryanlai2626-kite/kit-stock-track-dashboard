@@ -1591,7 +1591,7 @@ def plot_wind_gauge_bias_driven(
     # Layout (高度增加至 400 以容納底部文字，背景一致)
     fig.update_layout(
         shapes=shapes,
-        xaxis=dict(range=[-1.5, 1.5], visible=False, fixedrange=True),
+        xaxis=dict(range=[-1.6, 1.6], visible=False, fixedrange=True),
         yaxis=dict(range=[-0.5, 1.4], visible=False, fixedrange=True),
         paper_bgcolor='#1a1a1a', 
         plot_bgcolor='#1a1a1a',
@@ -2684,5 +2684,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
