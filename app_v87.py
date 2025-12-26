@@ -1607,10 +1607,10 @@ def plot_wind_gauge_bias_driven(
         paper_bgcolor='#1a1a1a', 
         plot_bgcolor='#1a1a1a',
         
-        height=350,
+        height=380,
         
         # 【修改 2】極窄邊距，讓圖表在橫式手機畫面中盡量撐開，不被壓縮
-        margin=dict(t=30, b=10, l=10, r=10),
+        margin=dict(t=5, b=5, l=5, r=5),
         
         template='plotly_dark'
     )
@@ -2242,17 +2242,10 @@ def show_dashboard():
         """
         st.markdown(cards_html, unsafe_allow_html=True)
 
-    # 移除 st.columns(2)，讓手機版自動流式排版，或保持兩欄但允許擠壓
-    # 建議：若股票數量不多，兩欄OK。若多，建議直接上下排。
-    # 這裡示範保留兩欄，但加入 gap
-    w1, w2 = st.columns(2, gap="medium") 
-    
-    with w1: 
-        st.markdown("##### 🚀 強勢週 TOP 3") # 標題縮小一點，用 h5
-        st.markdown(render_stock_tags_v113(day_data['worker_strong_list'], turnover_map), unsafe_allow_html=True)
-    with w2: 
-        st.markdown("##### 📈 週趨勢")
-        st.markdown(render_stock_tags_v113(day_data['worker_trend_list'], turnover_map), unsafe_allow_html=True)
+    st.markdown('<div class="strategy-banner worker-banner"><p class="banner-text">👨‍💼 上班族策略 (Worker Strategy)</p></div>', unsafe_allow_html=True)
+    w1, w2 = st.columns(2)
+    with w1: st.markdown("### 🚀 強勢週 TOP 3"); st.markdown(render_stock_tags_v113(day_data['worker_strong_list'], turnover_map), unsafe_allow_html=True)
+    with w2: st.markdown("### 📈 週趨勢"); st.markdown(render_stock_tags_v113(day_data['worker_trend_list'], turnover_map), unsafe_allow_html=True)
 
     st.markdown('<div class="strategy-banner boss-banner"><p class="banner-text">👑 老闆策略 (Boss Strategy)</p></div>', unsafe_allow_html=True)
     b1, b2 = st.columns(2)
