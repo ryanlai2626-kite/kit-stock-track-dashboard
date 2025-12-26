@@ -876,12 +876,12 @@ def plot_fear_greed_gauge_dark(score):
             showline=False,
             zerolinewidth=0,
             zerolinecolor='rgba(0,0,0,0)', # 透明化
+            scaleratio=1, 
             fixedrange=True
         ),
         paper_bgcolor='#1a1a1a', 
         plot_bgcolor='#1a1a1a',
         height=400,
-        autosize=True, # 允許寬度自動調整
         margin=dict(t=30, b=10, l=10, r=10),
         template='plotly_dark'
     )
@@ -1017,7 +1017,7 @@ def render_global_markets():
             # 這樣白色的文字和刻度線才看得到
             
             # 畫圖
-            st.plotly_chart(gauge_fig, use_container_width=True, height=400, config={'displayModeBar': False})
+            st.plotly_chart(gauge_fig, use_container_width=True, config={'displayModeBar': False})
             
             # 閉合 DIV
             st.markdown("</div>", unsafe_allow_html=True)
@@ -1587,18 +1587,14 @@ def plot_wind_gauge_bias_driven(
     fig.add_annotation(x=0.45, y=-0.22, text=f"持續 {tpex_streak} 天", showarrow=False, font=dict(size=12, color="#FFFFFF"))
     #fig.add_annotation(x=0.45, y=-0.35, text=f"乖離 {tpex_bias}%", showarrow=False, font=dict(size=11, color="#666666"))
 
-# Layout (修復黑洞效應的核心)
+    # Layout (高度增加至 400 以容納底部文字，背景一致)
     fig.update_layout(
         shapes=shapes,
-        # 【重要】移除 scaleanchor="x"，改用固定的 range
-        # 由於我們設定 height=400，這裡的 range 經過計算可以讓它看起來是圓的
-        xaxis=dict(range=[-1.6, 1.6], visible=False, fixedrange=True),
-        yaxis=dict(range=[-0.5, 1.3], visible=False, fixedrange=True),
-        
+        xaxis=dict(range=[-1.5, 1.5], visible=False, fixedrange=True),
+        yaxis=dict(range=[-0.5, 1.4], visible=False, scaleratio=1, fixedrange=True),
         paper_bgcolor='#1a1a1a', 
         plot_bgcolor='#1a1a1a',
-        height=400, # 鎖定高度
-        autosize=True, # 允許寬度自動調整
+        height=400, # 稍微加高
         margin=dict(t=10, b=10, l=10, r=10),
         template='plotly_dark'
     )
@@ -2182,6 +2178,10 @@ def show_dashboard():
             min-width: 100% !important;
         }
     }
+    /* 【新增】強制 Plotly 容器不塌陷 */
+    .js-plotly-plot {
+        min-height: 350px !important;
+    }
     </style>
     """, unsafe_allow_html=True)
     
@@ -2198,7 +2198,7 @@ def show_dashboard():
         
         st.markdown('<div style="background-color:#1a1a1a; border-radius:15px; padding:5px; box-shadow:0 4px 6px rgba(0,0,0,0.3);">', unsafe_allow_html=True)
         # 加上 key 確保不重複渲染，config 設定 responsive
-        st.plotly_chart(gauge_fig, use_container_width=True, height=400, config={'displayModeBar': False, 'responsive': True}, key="main_gauge")
+        st.plotly_chart(gauge_fig, use_container_width=True, config={'displayModeBar': False, 'responsive': True}, key="main_gauge")
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col_cards:
