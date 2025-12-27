@@ -758,7 +758,7 @@ def plot_fear_greed_gauge_dark(score):
     R_TICK_IN_MINOR = 0.90 # 小刻度內緣
     R_LABEL = 1.10       # 文字半徑
     R_POINTER = 0.70     # 指針半徑
-
+    
     def get_xy_from_angle(r, angle_deg):
         rad = math.radians(angle_deg)
         return r * math.cos(rad), r * math.sin(rad)
@@ -880,7 +880,7 @@ def plot_fear_greed_gauge_dark(score):
         ),
         paper_bgcolor='#1a1a1a', 
         plot_bgcolor='#1a1a1a',
-        height=350,
+        height=320,
         margin=dict(t=30, b=10, l=10, r=10),
         template='plotly_dark'
     )
@@ -1452,7 +1452,7 @@ def plot_wind_gauge_bias_driven(
     R_TICK_IN = 0.88       
     R_CURSOR_TIP = 0.86    
     R_CURSOR_BASE = 0.74   
-    R_LABEL = 1.25         
+    R_LABEL = 1.30         
     
     def get_xy_from_angle(r, angle_deg):
         rad = math.radians(angle_deg)
@@ -1525,47 +1525,6 @@ def plot_wind_gauge_bias_driven(
     # 右側 (60~100%) 中心約在 80%
     add_curved_label("強風 / 亂流循環", 80, c_red_base)
 
-    # 7. 中心資訊
-    shapes.append(dict(type="line", x0=0, y0=0.05, x1=0, y1=0.45, line=dict(color="#333333", width=1, dash="dot"), layer="below"))
-
-    def draw_market_info(x_center, title, data_dict, ptr_color):
-        price = data_dict.get('price', 0)
-        change = data_dict.get('change', 0)
-        pct = data_dict.get('pct_change', 0)
-        
-        p_color = "#FF2D00" if change > 0 else ("#00E676" if change < 0 else "#FFFFFF")
-        arrow = "▲" if change > 0 else ("▼" if change < 0 else "")
-        
-        fig.add_annotation(
-            x=x_center, y=0.37, 
-            text=f"● {title}", showarrow=False, 
-            font=dict(size=13, color=ptr_color, weight="bold")
-        )
-        fig.add_annotation(
-            x=x_center, y=0.22, 
-            text=f"{price:,.0f}" if price > 1000 else f"{price:,.2f}", 
-            showarrow=False, 
-            font=dict(size=21, color=p_color, family="Arial Black")
-        )
-        fig.add_annotation(
-            x=x_center, y=0.08, 
-            text=f"{arrow} {abs(change):.2f} ({abs(pct):.2f}%)", 
-            showarrow=False, 
-            font=dict(size=13, color=p_color, weight="bold")
-        )
-
-    draw_market_info(-0.40, "加權指數", taiex_data, COLOR_TAIEX_PTR)
-    draw_market_info(0.40, "櫃買指數", tpex_data, COLOR_TPEX_PTR)
-
-    # 底部資訊 (字體縮小以防跑版)
-    fig.add_annotation(x=-0.45, y=-0.08, text=f"{str(taiex_wind).strip()}", showarrow=False, font=dict(size=16, color=COLOR_TAIEX_PTR, weight="bold"))
-    fig.add_annotation(x=-0.45, y=-0.20, text=f"持續 {taiex_streak} 天", showarrow=False, font=dict(size=12, color="#FFFFFF"))
-    #fig.add_annotation(x=-0.45, y=-0.35, text=f"乖離 {taiex_bias}%", showarrow=False, font=dict(size=11, color="#666666"))
-
-    fig.add_annotation(x=0.45, y=-0.08, text=f"{str(tpex_wind).strip()}", showarrow=False, font=dict(size=16, color=COLOR_TPEX_PTR, weight="bold"))
-    fig.add_annotation(x=0.45, y=-0.20, text=f"持續 {tpex_streak} 天", showarrow=False, font=dict(size=12, color="#FFFFFF"))
-    #fig.add_annotation(x=0.45, y=-0.35, text=f"乖離 {tpex_bias}%", showarrow=False, font=dict(size=11, color="#666666"))
-
     # 6. 雙指針
     def draw_pointer(score, color, label):
         ptr_angle = 180 - (score / 100) * 180
@@ -1586,16 +1545,55 @@ def plot_wind_gauge_bias_driven(
     draw_pointer(score_tpex, COLOR_TPEX_PTR, "櫃買")
     draw_pointer(score_taiex, COLOR_TAIEX_PTR, "加權")
 
+    # 7. 中心資訊
+    shapes.append(dict(type="line", x0=0, y0=0.15, x1=0, y1=0.55, line=dict(color="#333333", width=1, dash="dot"), layer="below"))
+
+    def draw_market_info(x_center, title, data_dict, ptr_color):
+        price = data_dict.get('price', 0)
+        change = data_dict.get('change', 0)
+        pct = data_dict.get('pct_change', 0)
+        
+        p_color = "#FF2D00" if change > 0 else ("#00E676" if change < 0 else "#FFFFFF")
+        arrow = "▲" if change > 0 else ("▼" if change < 0 else "")
+        
+        fig.add_annotation(
+            x=x_center, y=0.37, 
+            text=f"● {title}", showarrow=False, 
+            font=dict(size=13, color=ptr_color, weight="bold")
+        )
+        fig.add_annotation(
+            x=x_center, y=0.22, 
+            text=f"{price:,.0f}" if price > 1000 else f"{price:,.2f}", 
+            showarrow=False, 
+            font=dict(size=22, color=p_color, family="Arial Black")
+        )
+        fig.add_annotation(
+            x=x_center, y=0.08, 
+            text=f"{arrow} {abs(change):.2f} ({abs(pct):.2f}%)", 
+            showarrow=False, 
+            font=dict(size=13, color=p_color, weight="bold")
+        )
+
+    draw_market_info(-0.40, "加權指數", taiex_data, COLOR_TAIEX_PTR)
+    draw_market_info(0.40, "櫃買指數", tpex_data, COLOR_TPEX_PTR)
+
+    # 底部資訊 (字體縮小以防跑版)
+    fig.add_annotation(x=-0.45, y=-0.08, text=f"{str(taiex_wind).strip()}", showarrow=False, font=dict(size=16, color=COLOR_TAIEX_PTR, weight="bold"))
+    fig.add_annotation(x=-0.45, y=-0.22, text=f"持續 {taiex_streak} 天", showarrow=False, font=dict(size=12, color="#FFFFFF"))
+    #fig.add_annotation(x=-0.45, y=-0.35, text=f"乖離 {taiex_bias}%", showarrow=False, font=dict(size=11, color="#666666"))
+
+    fig.add_annotation(x=0.45, y=-0.08, text=f"{str(tpex_wind).strip()}", showarrow=False, font=dict(size=16, color=COLOR_TPEX_PTR, weight="bold"))
+    fig.add_annotation(x=0.45, y=-0.22, text=f"持續 {tpex_streak} 天", showarrow=False, font=dict(size=12, color="#FFFFFF"))
+    #fig.add_annotation(x=0.45, y=-0.35, text=f"乖離 {tpex_bias}%", showarrow=False, font=dict(size=11, color="#666666"))
 
     # Layout (高度增加至 400 以容納底部文字，背景一致)
     fig.update_layout(
         shapes=shapes,
-        xaxis=dict(range=[-1.7, 1.7], visible=False, fixedrange=True),
+        xaxis=dict(range=[-1.6, 1.6], visible=False, fixedrange=True),
         yaxis=dict(range=[-0.5, 1.3], visible=False, fixedrange=True),
         paper_bgcolor='#1a1a1a', 
         plot_bgcolor='#1a1a1a',
-        height=400, # 稍微加高
-	autosize=True,
+        height=360, # 稍微加高
         margin=dict(t=10, b=10, l=10, r=10),
         template='plotly_dark'
     )
@@ -2172,12 +2170,16 @@ def show_dashboard():
     # 插入 CSS：強制在寬度小於 992px (平板/手機橫式) 時，將儀表板區塊變為單欄堆疊
     st.markdown("""
     <style>
-    @media (max-width: 992px) {
+    @media (max-width: 1300px) {
         div[data-testid="column"] {
             width: 100% !important;
             flex: 1 1 auto !important;
             min-width: 100% !important;
         }
+    }
+	/* 【新增】強制 Plotly 容器不塌陷 */
+    .js-plotly-plot {
+        min-height: 400px !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -2195,7 +2197,7 @@ def show_dashboard():
         
         st.markdown('<div style="background-color:#1a1a1a; border-radius:15px; padding:5px; box-shadow:0 4px 6px rgba(0,0,0,0.3);">', unsafe_allow_html=True)
         # 加上 key 確保不重複渲染，config 設定 responsive
-        st.plotly_chart(gauge_fig, use_container_width=True, config={'displayModeBar': False, 'responsive': True}, key="main_gauge")
+        st.plotly_chart(gauge_fig, use_container_width=True, height=360, config={'displayModeBar': False, 'responsive': True}, key="main_gauge")
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col_cards:
@@ -2684,3 +2686,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+
