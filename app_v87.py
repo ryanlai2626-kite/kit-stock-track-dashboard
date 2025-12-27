@@ -1594,6 +1594,7 @@ def plot_wind_gauge_bias_driven(
         paper_bgcolor='#1a1a1a', 
         plot_bgcolor='#1a1a1a',
         height=360, # 稍微加高
+		autosize=True, # 允許寬度自動調整
         margin=dict(t=10, b=10, l=10, r=10),
         template='plotly_dark'
     )
@@ -2682,6 +2683,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
