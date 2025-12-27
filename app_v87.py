@@ -22,7 +22,7 @@ except ImportError:
     from typing import TypedDict
 
 # --- 1. 頁面與 CSS (V158: 年度循環分析版) ---
-st.set_page_config(layout="wide", page_title="StockTrack V158", page_icon="💰")
+st.set_page_config(layout="wide", page_title="Wind StockTrack", page_icon="💰")
 
 st.markdown("""
 <style>
@@ -162,7 +162,7 @@ if GOOGLE_API_KEY:
         generation_config=generation_config,
     )
 
-DB_FILE = 'stock_data_v74.csv' 
+DB_FILE = 'Kit_sotck_list_export_backup.csv' 
 BACKUP_FILE = 'stock_data_backup.csv'
 
 # ▼▼▼▼▼▼ 請確保補上這兩行 ▼▼▼▼▼▼
@@ -2686,6 +2686,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
