@@ -758,7 +758,7 @@ def plot_fear_greed_gauge_dark(score):
     R_TICK_IN_MINOR = 0.90 # 小刻度內緣
     R_LABEL = 1.10       # 文字半徑
     R_POINTER = 0.70     # 指針半徑
-    
+
     def get_xy_from_angle(r, angle_deg):
         rad = math.radians(angle_deg)
         return r * math.cos(rad), r * math.sin(rad)
@@ -880,7 +880,7 @@ def plot_fear_greed_gauge_dark(score):
         ),
         paper_bgcolor='#1a1a1a', 
         plot_bgcolor='#1a1a1a',
-        height=320,
+        height=350,
         margin=dict(t=30, b=10, l=10, r=10),
         template='plotly_dark'
     )
@@ -1452,7 +1452,7 @@ def plot_wind_gauge_bias_driven(
     R_TICK_IN = 0.88       
     R_CURSOR_TIP = 0.86    
     R_CURSOR_BASE = 0.74   
-    R_LABEL = 1.30         
+    R_LABEL = 1.25         
     
     def get_xy_from_angle(r, angle_deg):
         rad = math.radians(angle_deg)
@@ -1525,28 +1525,8 @@ def plot_wind_gauge_bias_driven(
     # 右側 (60~100%) 中心約在 80%
     add_curved_label("強風 / 亂流循環", 80, c_red_base)
 
-    # 6. 雙指針
-    def draw_pointer(score, color, label):
-        ptr_angle = 180 - (score / 100) * 180
-        rad = math.radians(ptr_angle)
-        tri_w = 0.07 
-        tip_x, tip_y = R_CURSOR_TIP * math.cos(rad), R_CURSOR_TIP * math.sin(rad)
-        base_x, base_y = R_CURSOR_BASE * math.cos(rad), R_CURSOR_BASE * math.sin(rad)
-        dx, dy = -math.sin(rad) * tri_w, math.cos(rad) * tri_w
-        
-        fig.add_trace(go.Scatter(
-            x=[tip_x, base_x + dx, base_x - dx, tip_x],
-            y=[tip_y, base_y + dy, base_y - dy, tip_y],
-            fill='toself', fillcolor=color,
-            line=dict(color='#FFFFFF', width=1.5),
-            mode='lines', name=label, showlegend=False, hoverinfo='skip'
-        ))
-        
-    draw_pointer(score_tpex, COLOR_TPEX_PTR, "櫃買")
-    draw_pointer(score_taiex, COLOR_TAIEX_PTR, "加權")
-
     # 7. 中心資訊
-    shapes.append(dict(type="line", x0=0, y0=0.15, x1=0, y1=0.55, line=dict(color="#333333", width=1, dash="dot"), layer="below"))
+    shapes.append(dict(type="line", x0=0, y0=0.05, x1=0, y1=0.45, line=dict(color="#333333", width=1, dash="dot"), layer="below"))
 
     def draw_market_info(x_center, title, data_dict, ptr_color):
         price = data_dict.get('price', 0)
@@ -1586,15 +1566,36 @@ def plot_wind_gauge_bias_driven(
     fig.add_annotation(x=0.45, y=-0.20, text=f"持續 {tpex_streak} 天", showarrow=False, font=dict(size=12, color="#FFFFFF"))
     #fig.add_annotation(x=0.45, y=-0.35, text=f"乖離 {tpex_bias}%", showarrow=False, font=dict(size=11, color="#666666"))
 
+    # 6. 雙指針
+    def draw_pointer(score, color, label):
+        ptr_angle = 180 - (score / 100) * 180
+        rad = math.radians(ptr_angle)
+        tri_w = 0.07 
+        tip_x, tip_y = R_CURSOR_TIP * math.cos(rad), R_CURSOR_TIP * math.sin(rad)
+        base_x, base_y = R_CURSOR_BASE * math.cos(rad), R_CURSOR_BASE * math.sin(rad)
+        dx, dy = -math.sin(rad) * tri_w, math.cos(rad) * tri_w
+        
+        fig.add_trace(go.Scatter(
+            x=[tip_x, base_x + dx, base_x - dx, tip_x],
+            y=[tip_y, base_y + dy, base_y - dy, tip_y],
+            fill='toself', fillcolor=color,
+            line=dict(color='#FFFFFF', width=1.5),
+            mode='lines', name=label, showlegend=False, hoverinfo='skip'
+        ))
+        
+    draw_pointer(score_tpex, COLOR_TPEX_PTR, "櫃買")
+    draw_pointer(score_taiex, COLOR_TAIEX_PTR, "加權")
+
+
     # Layout (高度增加至 400 以容納底部文字，背景一致)
     fig.update_layout(
         shapes=shapes,
-        xaxis=dict(range=[-1.4, 1.4], visible=False, fixedrange=True),
-        yaxis=dict(range=[-0.5, 1.4], visible=False, fixedrange=True),
+        xaxis=dict(range=[-1.7, 1.7], visible=False, fixedrange=True),
+        yaxis=dict(range=[-0.5, 1.3], visible=False, fixedrange=True),
         paper_bgcolor='#1a1a1a', 
         plot_bgcolor='#1a1a1a',
-        height=360, # 稍微加高
-		autosize=True, # 允許寬度自動調整
+        height=400, # 稍微加高
+	autosize=True,
         margin=dict(t=10, b=10, l=10, r=10),
         template='plotly_dark'
     )
@@ -2683,7 +2684,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
